@@ -19,12 +19,13 @@ svg{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
 #panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(94vw,94vh,640px);aspect-ratio:1;padding:22px;display:flex;flex-direction:column;gap:10px;z-index:5}
 #panel h1{margin:0;font-size:28px;letter-spacing:.5px}
 #panel p{margin:0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 button{font:inherit;color:inherit;background:#fff;border:1px solid #333;padding:5px 10px;cursor:pointer}
 button:hover{background:#ffe9a0}
 button:focus-visible,input:focus-visible{outline:3px solid #123e73;outline-offset:2px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.row span{margin-left:auto}
+.row span{margin-inline-start:auto}
 #q{font:inherit;padding:9px 12px;border:1px solid #333;background:#fff;width:100%}
 .res{max-height:132px;overflow:auto;background:#fff;border:1px solid #333;display:flex;flex-direction:column}
 .res button{border:0;border-bottom:1px solid #3332;text-align:left;padding:6px 12px}
@@ -57,7 +58,24 @@ button:focus-visible,input:focus-visible{outline:3px solid #123e73;outline-offse
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.0.1/dist/topojson-client.min.js"></script>
 <script>
 const $ = s => document.querySelector(s);
-const MODES = ['World','Europe','Asia','Africa','North America','South America','Americas','Oceania','Oceans only'];
+const MODES = ['World','Europe','Asia','Africa','North America','South America','Americas','Oceania','Oceans only','Test'];
+const MODE_HE = {World:'עולם',Europe:'אירופה',Asia:'אסיה',Africa:'אפריקה','North America':'צפון אמריקה','South America':'דרום אמריקה',Americas:'אמריקה',Oceania:'אוקיאניה','Oceans only':'אוקיינוסים בלבד',Test:'מבחן'};
+const TEST = ['Israel','Lebanon','Syria','Jordan','Egypt','Turkey','Sudan','Iran','Iraq','Saudi Arabia','Yemen','Oman','United Arab Emirates','Kuwait','Qatar','Ethiopia','Eritrea'];
+const OCHE = ['האוקיינוס האטלנטי הצפוני','האוקיינוס האטלנטי הדרומי','האוקיינוס השקט הצפוני','האוקיינוס השקט הדרומי','האוקיינוס ההודי','האוקיינוס הארקטי','האוקיינוס הדרומי'];
+const HE_X = {Kosovo:'קוסובו','N. Cyprus':'צפון קפריסין',Somaliland:'סומלילנד','United Arab Emirates':'איחוד האמירויות'};
+const CODES = '242FJ834TZ732EH124CA840US398KZ860UZ598PG360ID032AR152CL180CD706SO404KE729SD148TD332HT214DO643RU044BS238FK578NO304GL260TF626TL710ZA426LS484MX858UY076BR068BO604PE170CO591PA188CR558NI340HN222SV320GT084BZ862VE328GY740SR250FR218EC630PR388JM192CU716ZW072BW516NA686SN466ML478MR204BJ562NE566NG120CM768TG288GH384CI324GN624GW430LR694SL854BF140CF178CG266GA226GQ894ZM454MW508MZ748SZ024AO108BI376IL422LB450MG275PS270GM788TN012DZ400JO784AE634QA414KW368IQ512OM548VU116KH764TH418LA104MM704VN408KP410KR496MN356IN050BD064BT524NP586PK004AF762TJ417KG795TM364IR760SY051AM752SE112BY804UA616PL040AT348HU498MD642RO440LT428LV233EE276DE100BG300GR792TR008AL191HR756CH442LU056BE528NL620PT724ES372IE540NC090SB554NZ036AU144LK156CN158TW380IT208DK826GB352IS031AZ268GE608PH458MY096BN705SI246FI703SK203CZ232ER392JP600PY887YE682SA010AQ196CY504MA818EG434LY231ET262DJ800UG646RW070BA807MK688RS499ME780TT728SS';
+const T = {
+  en:{title:'Blind Map',sub:'Search for countries or choose a mode, press Start, then drag each name onto the map.',all:'Pick all',none:'Clear',oc:'+ Oceans',ph:'Search countries…',nomatch:'No country matches that search.',empty:'No countries picked yet.',start:'Start',menu:'Menu',miss:'Misses',done:'Map complete',back:'Back to menu',rm:'Remove',
+    cnt:(n,o)=>n+' countries'+(o?' + 7 oceans':''),res:(n,t,m)=>`${n} placed in ${t} with ${m} misses.`},
+  he:{title:'מפה עיוורת',sub:'חפשו מדינות או בחרו מצב, לחצו על התחל, ואז גררו כל שם למקומו על המפה.',all:'בחר הכול',none:'נקה',oc:'+ אוקיינוסים',ph:'חיפוש מדינות…',nomatch:'לא נמצאה מדינה תואמת.',empty:'עדיין לא נבחרו מדינות.',start:'התחל',menu:'תפריט',miss:'טעויות',done:'המפה הושלמה',back:'חזרה לתפריט',rm:'הסר',
+    cnt:(n,o)=>n+' מדינות'+(o?' + 7 אוקיינוסים':''),res:(n,t,m)=>`${n} פריטים הונחו תוך ${t} עם ${m} טעויות.`}
+};
+let lang = 'en'; try { lang = localStorage.getItem('bm-lang') || 'en'; } catch(e){}
+const t = k => T[lang][k];
+const nm = f => lang==='he' ? f.he : f.properties.name;
+const oname = i => lang==='he' ? OCHE[i] : OCEANS[i][0];
+const modeLabel = m => lang==='he' ? MODE_HE[m] : m;
+function applyDir(){ ['panel','hud','side'].forEach(id => $('#'+id).dir = lang==='he' ? 'rtl' : 'ltr'); document.documentElement.lang = lang; }
 // [name, lon, lat, tolerance in radians]
 const OCEANS = [['North Atlantic',-40,30,.4],['South Atlantic',-15,-22,.4],['North Pacific',-150,25,.5],['South Pacific',-125,-28,.5],['Indian Ocean',80,-22,.45],['Arctic Ocean',90,80,.35],['Southern Ocean',30,-63,.3]];
 
@@ -73,11 +91,18 @@ function regionOf(f){
   if (lo <= 33 && la >= 35) return ['Europe'];
   return ['Asia'];
 }
-const inMode = (f,m) => m==='World' || (m==='Americas' ? f.regs.some(r=>/America/.test(r)) : f.regs.includes(m));
+const inMode = (f,m) => m==='World' || (m==='Test' && TEST.includes(f.properties.name)) || (m==='Americas' ? f.regs.some(r=>/America/.test(r)) : f.regs.includes(m));
 
 d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(topo => {
   feats = topojson.feature(topo, topo.objects.countries).features;
-  feats.forEach((f,i) => { f.i = i; f.regs = regionOf(f); f.play = !/Antarc/.test(f.properties.name); });
+  const code = {}; for (const m of CODES.matchAll(/(\d{3})([A-Z]{2})/g)) code[m[1]] = m[2];
+  let dn = null; try { dn = new Intl.DisplayNames(['he'], {type:'region'}); } catch(e){}
+  feats.forEach((f,i) => {
+    f.i = i; f.regs = regionOf(f); f.play = !/Antarc/.test(f.properties.name);
+    const n = f.properties.name; let he = HE_X[n];
+    if (!he && dn && code[f.id]) { try { he = dn.of(code[f.id]); } catch(e){} }
+    f.he = he || n;
+  });
   menu();
 }).catch(() => { $('#panel').innerHTML = '<h1>Blind Map</h1><p>Could not load the map data. Check your internet connection and reload.</p>'; });
 
@@ -85,39 +110,41 @@ function menu(){
   clearInterval(timer);
   $('#hud').hidden = $('#side').hidden = true;
   svg = d3.select('#map'); svg.selectAll('*').remove(); drawMap(false);
-  const list = feats.filter(f => f.play).sort((a,b) => a.properties.name.localeCompare(b.properties.name));
-  const p = $('#panel'); p.hidden = false;
-  p.innerHTML = `<h1>Blind Map</h1>
-  <p>Search for countries or choose a mode, press Start, then drag each name onto the map.</p>
-  <div class="chips">${MODES.map(m=>`<button data-m="${m}">${m}</button>`).join('')}</div>
-  <div class="row"><button id="all">Pick all</button><button id="none">Clear</button>
-  <label><input type="checkbox" id="oc"> + Oceans</label><span id="cnt"></span></div>
-  <input id="q" type="search" placeholder="Search countries…" autocomplete="off" aria-label="Search countries">
+  const list = feats.filter(f => f.play).sort((a,b) => nm(a).localeCompare(nm(b), lang));
+  const p = $('#panel'); p.hidden = false; applyDir();
+  p.innerHTML = `<div class="top"><h1>${t('title')}</h1><button id="lang">${lang==='he' ? 'English' : 'עברית'}</button></div>
+  <p>${t('sub')}</p>
+  <div class="chips">${MODES.map(m=>`<button data-m="${m}">${modeLabel(m)}</button>`).join('')}</div>
+  <div class="row"><button id="all">${t('all')}</button><button id="none">${t('none')}</button>
+  <label><input type="checkbox" id="oc"> ${t('oc')}</label><span id="cnt"></span></div>
+  <input id="q" type="search" placeholder="${t('ph')}" autocomplete="off" aria-label="${t('ph')}">
   <div id="res" class="res" hidden></div>
   <div id="picked" class="picked"></div>
-  <button class="go" id="go">Start</button>`;
+  <button class="go" id="go">${t('start')}</button>`;
   const matches = () => {
     const q = $('#q').value.trim().toLowerCase(); if (!q) return [];
-    const hit = list.filter(f => f.properties.name.toLowerCase().includes(q));
-    return hit.sort((a,b) => (b.properties.name.toLowerCase().startsWith(q)) - (a.properties.name.toLowerCase().startsWith(q))).slice(0,40);
+    const a = f => nm(f).toLowerCase(), e = f => f.properties.name.toLowerCase();
+    const hit = list.filter(f => a(f).includes(q) || e(f).includes(q));
+    return hit.sort((x,y) => (a(y).startsWith(q) || e(y).startsWith(q)) - (a(x).startsWith(q) || e(x).startsWith(q))).slice(0,40);
   };
   const results = () => {
     const m = matches(), r = $('#res');
     r.hidden = !$('#q').value.trim();
-    r.innerHTML = m.length ? m.map(f => `<button data-t="${f.i}" class="${sel.has(f.i)?'on':''}">${sel.has(f.i)?'✓ ':''}${f.properties.name}</button>`).join('') : '<p>No country matches that search.</p>';
+    r.innerHTML = m.length ? m.map(f => `<button data-t="${f.i}" class="${sel.has(f.i)?'on':''}">${sel.has(f.i)?'✓ ':''}${nm(f)}</button>`).join('') : `<p>${t('nomatch')}</p>`;
   };
   const refresh = () => {
     const chosen = list.filter(f => sel.has(f.i));
-    $('#picked').innerHTML = chosen.length ? chosen.map(f => `<button class="tag" data-rm="${f.i}" title="Remove">${f.properties.name} ×</button>`).join('') : '<p>No countries picked yet.</p>';
+    $('#picked').innerHTML = chosen.length ? chosen.map(f => `<button class="tag" data-rm="${f.i}" title="${t('rm')}">${nm(f)} ×</button>`).join('') : `<p>${t('empty')}</p>`;
     $('#oc').checked = oceans;
-    $('#cnt').textContent = sel.size + ' countries' + (oceans ? ' + 7 oceans' : '');
+    $('#cnt').textContent = T[lang].cnt(sel.size, oceans);
     $('#go').disabled = !sel.size && !oceans;
     results();
   };
   p.onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
-    if (d.m){ sel = d.m==='Oceans only' ? new Set() : new Set(list.filter(f=>inMode(f,d.m)).map(f=>f.i)); if (d.m==='Oceans only') oceans = true; refresh(); }
+    if (b.id==='lang'){ lang = lang==='he' ? 'en' : 'he'; try { localStorage.setItem('bm-lang', lang); } catch(x){} menu(); }
+    else if (d.m){ sel = d.m==='Oceans only' ? new Set() : new Set(list.filter(f=>inMode(f,d.m)).map(f=>f.i)); oceans = d.m==='Oceans only'; refresh(); }
     else if (d.t){ const i = +d.t; sel.has(i) ? sel.delete(i) : sel.add(i); refresh(); }
     else if (d.rm){ sel.delete(+d.rm); refresh(); }
     else if (b.id==='all'){ sel = new Set(list.map(f=>f.i)); refresh(); }
@@ -155,10 +182,11 @@ function start(){
     const aw = W - sideW - 40, ah = H - 80, k = Math.max(1, Math.min(40, .92*Math.min(aw/(x1-x0), ah/(y1-y0))));
     svg.call(zoom.transform, d3.zoomIdentity.translate(aw/2+20 - k*(x0+x1)/2, H/2 - k*(y0+y1)/2).scale(k));
   }
-  const items = feats.filter(f => sel.has(f.i)).map(f => ({k:'c'+f.i, name:f.properties.name}));
-  if (oceans) OCEANS.forEach((o,i) => items.push({k:'o'+i, name:o[0], ocean:true}));
-  items.sort((a,b) => a.name.localeCompare(b.name));
+  const items = feats.filter(f => sel.has(f.i)).map(f => ({k:'c'+f.i, name:nm(f)}));
+  if (oceans) OCEANS.forEach((o,i) => items.push({k:'o'+i, name:oname(i), ocean:true}));
+  items.sort((a,b) => a.name.localeCompare(b.name, lang));
   state = {total:items.length, left:items.length, miss:0, t0:Date.now()};
+  applyDir();
   const side = $('#side'); side.hidden = false;
   side.innerHTML = items.map(it => `<div class="it" data-k="${it.k}" ${it.ocean?'style="font-style:italic"':''}>${it.name}</div>`).join('');
   side.onpointerdown = onDown;
@@ -169,7 +197,7 @@ function start(){
 
 function hud(){
   const s = Math.floor((Date.now() - state.t0)/1000);
-  $('#hud').innerHTML = `<b>${state.total - state.left} / ${state.total}</b><span>Misses: ${state.miss}</span><span>${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</span><button id="quit">Menu</button>`;
+  $('#hud').innerHTML = `<b>${state.total - state.left} / ${state.total}</b><span>${t('miss')}: ${state.miss}</span><span dir="ltr">${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</span><button id="quit">${t('menu')}</button>`;
 }
 
 function under(x,y){ const el = document.elementFromPoint(x,y); return el && el.classList && el.classList.contains('c') ? el : null; }
@@ -201,7 +229,7 @@ function drop(it, x, y){
     if (ll && isFinite(ll[0]) && d3.geoDistance(ll,[o[1],o[2]]) < o[3]){
       ok = true;
       const c = proj([o[1],o[2]]);
-      g.append('text').attr('class','oc').attr('x',c[0]).attr('y',c[1]).attr('font-size',15/d3.zoomTransform(svg.node()).k).text(o[0]);
+      g.append('text').attr('class','oc').attr('x',c[0]).attr('y',c[1]).attr('font-size',15/d3.zoomTransform(svg.node()).k).text(oname(+k.slice(1)));
     }
   }
   if (ok){ it.remove(); if (!--state.left) finish(); else hud(); return; }
@@ -215,10 +243,10 @@ function finish(){
   const s = Math.floor((Date.now() - state.t0)/1000), p = $('#panel');
   $('#side').hidden = $('#hud').hidden = true;
   p.hidden = false;
-  p.innerHTML = `<h1>Map complete</h1><p>${state.total} placed in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} with ${state.miss} misses.</p>
-  <div style="flex:1"></div><button class="go" id="again">Back to menu</button>`;
+  p.innerHTML = `<h1>${t('done')}</h1><p>${T[lang].res(state.total, Math.floor(s/60)+':'+String(s%60).padStart(2,'0'), state.miss)}</p>
+  <div style="flex:1"></div><button class="go" id="again">${t('back')}</button>`;
   p.onclick = e => { if (e.target.id==='again') menu(); };
-  p.onchange = null;
+  p.onchange = p.oninput = p.onkeydown = null;
 }
 </script>
 </body>
