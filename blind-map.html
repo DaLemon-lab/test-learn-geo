@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blind Map</title>
+<style>
+:root{--sea:#6fa6dd;--ink:#1b2a3a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sea);font:15px/1.4 "Trebuchet MS",Verdana,sans-serif;color:var(--ink)}
+svg{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+.c{fill:#fff;stroke:#333;stroke-width:.6;vector-effect:non-scaling-stroke}
+.c.off{fill:#dcdcdc}
+.c.hot{fill:#ffe9a0}
+.c.ok{fill:#8fd694}
+.c.bad{fill:#f4a0a0}
+.oc{fill:#123e73;font-style:italic;text-anchor:middle;paint-order:stroke;stroke:#ffffffaa;stroke-width:3px}
+.box{background:rgba(255,255,255,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 8px 30px #0004;border:1px solid #fff9}
+#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(94vw,94vh,640px);aspect-ratio:1;padding:22px;display:flex;flex-direction:column;gap:10px;z-index:5}
+#panel h1{margin:0;font-size:28px;letter-spacing:.5px}
+#panel p{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit;background:#fff;border:1px solid #333;padding:5px 10px;cursor:pointer}
+button:hover{background:#ffe9a0}
+button:focus-visible,input:focus-visible{outline:3px solid #123e73;outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row span{margin-left:auto}
+#q{font:inherit;padding:9px 12px;border:1px solid #333;background:#fff;width:100%}
+.res{max-height:132px;overflow:auto;background:#fff;border:1px solid #333;display:flex;flex-direction:column}
+.res button{border:0;border-bottom:1px solid #3332;text-align:left;padding:6px 12px}
+.res button.on{background:#d4efd6}
+.res p{padding:6px 12px;color:#555}
+.picked{flex:1;min-height:0;overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;padding:8px;background:#fff8;border:1px solid #3334}
+.picked p{color:#444}
+.tag{background:#fff;border:1px solid #333;padding:3px 9px}
+.go{background:#1d4f8a;color:#fff;border-color:#123e73;padding:10px;font-size:17px}
+.go:hover{background:#2a66ad}
+.go:disabled{opacity:.5;cursor:not-allowed}
+#hud{position:fixed;left:12px;top:12px;padding:10px 14px;z-index:4;display:flex;gap:14px;align-items:center}
+#side{position:fixed;right:12px;top:12px;bottom:12px;width:min(230px,42vw);padding:8px;overflow:auto;z-index:4}
+.it{padding:8px 10px;margin:0 0 5px;background:#fff;border:1px solid #333;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
+.it.lift{opacity:.35}
+.it.shake{animation:sh .3s}
+.ghost{position:fixed;transform:translate(-50%,-50%);pointer-events:none;z-index:9;box-shadow:0 6px 16px #0006;width:200px;margin:0}
+@keyframes sh{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@media (prefers-reduced-motion:reduce){.it.shake{animation:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<svg id="map"></svg>
+<div id="hud" class="box" hidden></div>
+<div id="side" class="box" hidden></div>
+<div id="panel" class="box"><h1>Blind Map</h1><p>Loading the map… (needs an internet connection)</p></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.0.1/dist/topojson-client.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const MODES = ['World','Europe','Asia','Africa','North America','South America','Americas','Oceania','Oceans only'];
+// [name, lon, lat, tolerance in radians]
+const OCEANS = [['North Atlantic',-40,30,.4],['South Atlantic',-15,-22,.4],['North Pacific',-150,25,.5],['South Pacific',-125,-28,.5],['Indian Ocean',80,-22,.45],['Arctic Ocean',90,80,.35],['Southern Ocean',30,-63,.3]];
+
+let feats = [], sel = new Set(), oceans = false;
+let svg, g, proj, path, zoom, state = null, timer;
+
+function regionOf(f){
+  const [lo,la] = d3.geoCentroid(f), n = f.properties.name;
+  if (n === 'Russia') return ['Europe','Asia'];
+  if (lo < -30) return la < 0 && lo < -140 ? ['Oceania'] : [la > 7.8 ? 'North America' : 'South America'];
+  if (la < 0 && lo > 128) return ['Oceania'];
+  if ((lo < 34 && la < 34.8) || (lo >= 34 && lo < 52 && la < 16.5 && !(la > 12 && lo > 44))) return ['Africa'];
+  if (lo <= 33 && la >= 35) return ['Europe'];
+  return ['Asia'];
+}
+const inMode = (f,m) => m==='World' || (m==='Americas' ? f.regs.some(r=>/America/.test(r)) : f.regs.includes(m));
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(topo => {
+  feats = topojson.feature(topo, topo.objects.countries).features;
+  feats.forEach((f,i) => { f.i = i; f.regs = regionOf(f); f.play = !/Antarc/.test(f.properties.name); });
+  menu();
+}).catch(() => { $('#panel').innerHTML = '<h1>Blind Map</h1><p>Could not load the map data. Check your internet connection and reload.</p>'; });
+
+function menu(){
+  clearInterval(timer);
+  $('#hud').hidden = $('#side').hidden = true;
+  svg = d3.select('#map'); svg.selectAll('*').remove(); drawMap(false);
+  const list = feats.filter(f => f.play).sort((a,b) => a.properties.name.localeCompare(b.properties.name));
+  const p = $('#panel'); p.hidden = false;
+  p.innerHTML = `<h1>Blind Map</h1>
+  <p>Search for countries or choose a mode, press Start, then drag each name onto the map.</p>
+  <div class="chips">${MODES.map(m=>`<button data-m="${m}">${m}</button>`).join('')}</div>
+  <div class="row"><button id="all">Pick all</button><button id="none">Clear</button>
+  <label><input type="checkbox" id="oc"> + Oceans</label><span id="cnt"></span></div>
+  <input id="q" type="search" placeholder="Search countries…" autocomplete="off" aria-label="Search countries">
+  <div id="res" class="res" hidden></div>
+  <div id="picked" class="picked"></div>
+  <button class="go" id="go">Start</button>`;
+  const matches = () => {
+    const q = $('#q').value.trim().toLowerCase(); if (!q) return [];
+    const hit = list.filter(f => f.properties.name.toLowerCase().includes(q));
+    return hit.sort((a,b) => (b.properties.name.toLowerCase().startsWith(q)) - (a.properties.name.toLowerCase().startsWith(q))).slice(0,40);
+  };
+  const results = () => {
+    const m = matches(), r = $('#res');
+    r.hidden = !$('#q').value.trim();
+    r.innerHTML = m.length ? m.map(f => `<button data-t="${f.i}" class="${sel.has(f.i)?'on':''}">${sel.has(f.i)?'✓ ':''}${f.properties.name}</button>`).join('') : '<p>No country matches that search.</p>';
+  };
+  const refresh = () => {
+    const chosen = list.filter(f => sel.has(f.i));
+    $('#picked').innerHTML = chosen.length ? chosen.map(f => `<button class="tag" data-rm="${f.i}" title="Remove">${f.properties.name} ×</button>`).join('') : '<p>No countries picked yet.</p>';
+    $('#oc').checked = oceans;
+    $('#cnt').textContent = sel.size + ' countries' + (oceans ? ' + 7 oceans' : '');
+    $('#go').disabled = !sel.size && !oceans;
+    results();
+  };
+  p.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if (d.m){ sel = d.m==='Oceans only' ? new Set() : new Set(list.filter(f=>inMode(f,d.m)).map(f=>f.i)); if (d.m==='Oceans only') oceans = true; refresh(); }
+    else if (d.t){ const i = +d.t; sel.has(i) ? sel.delete(i) : sel.add(i); refresh(); }
+    else if (d.rm){ sel.delete(+d.rm); refresh(); }
+    else if (b.id==='all'){ sel = new Set(list.map(f=>f.i)); refresh(); }
+    else if (b.id==='none'){ sel.clear(); oceans = false; $('#q').value = ''; refresh(); }
+    else if (b.id==='go') start();
+  };
+  p.oninput = e => { if (e.target.id==='q') results(); };
+  p.onkeydown = e => {
+    if (e.target.id==='q' && e.key==='Enter'){ const m = matches()[0]; if (m){ sel.add(m.i); e.target.value = ''; refresh(); } }
+  };
+  p.onchange = e => { if (e.target.id==='oc'){ oceans = e.target.checked; refresh(); } };
+  refresh();
+}
+
+function drawMap(playing){
+  const W = innerWidth, H = innerHeight, sideW = playing ? Math.min(250, W*.42) : 0;
+  proj = d3.geoNaturalEarth1().fitExtent([[16,16],[W - sideW - 16, H - 16]], {type:'Sphere'});
+  path = d3.geoPath(proj);
+  g = svg.append('g');
+  g.selectAll('path').data(feats).join('path').attr('class', f => 'c' + (playing && sel.has(f.i) ? '' : ' off'))
+    .classed('off', f => playing ? !sel.has(f.i) : false).attr('d', path).attr('data-i', f => f.i);
+  zoom = d3.zoom().scaleExtent([1,60]).on('zoom', e => { g.attr('transform', e.transform); g.selectAll('.oc').attr('font-size', 15/e.transform.k); });
+  svg.call(zoom).on('dblclick.zoom', null);
+}
+
+function start(){
+  $('#panel').hidden = true;
+  svg.selectAll('*').remove();
+  drawMap(true);
+  // zoom to the picked region
+  const W = innerWidth, H = innerHeight, sideW = Math.min(250, W*.42), worldW = path.bounds({type:'Sphere'})[1][0] - path.bounds({type:'Sphere'})[0][0];
+  const chosen = feats.filter(f => sel.has(f.i)).map(f => ({f,b:path.bounds(f)})).filter(o => o.b[1][0]-o.b[0][0] < worldW*.4);
+  if (chosen.length && !oceans){
+    const x0 = d3.min(chosen,o=>o.b[0][0]), y0 = d3.min(chosen,o=>o.b[0][1]), x1 = d3.max(chosen,o=>o.b[1][0]), y1 = d3.max(chosen,o=>o.b[1][1]);
+    const aw = W - sideW - 40, ah = H - 80, k = Math.max(1, Math.min(40, .92*Math.min(aw/(x1-x0), ah/(y1-y0))));
+    svg.call(zoom.transform, d3.zoomIdentity.translate(aw/2+20 - k*(x0+x1)/2, H/2 - k*(y0+y1)/2).scale(k));
+  }
+  const items = feats.filter(f => sel.has(f.i)).map(f => ({k:'c'+f.i, name:f.properties.name}));
+  if (oceans) OCEANS.forEach((o,i) => items.push({k:'o'+i, name:o[0], ocean:true}));
+  items.sort((a,b) => a.name.localeCompare(b.name));
+  state = {total:items.length, left:items.length, miss:0, t0:Date.now()};
+  const side = $('#side'); side.hidden = false;
+  side.innerHTML = items.map(it => `<div class="it" data-k="${it.k}" ${it.ocean?'style="font-style:italic"':''}>${it.name}</div>`).join('');
+  side.onpointerdown = onDown;
+  $('#hud').hidden = false;
+  $('#hud').onclick = e => { if (e.target.id==='quit') menu(); };
+  clearInterval(timer); timer = setInterval(hud, 500); hud();
+}
+
+function hud(){
+  const s = Math.floor((Date.now() - state.t0)/1000);
+  $('#hud').innerHTML = `<b>${state.total - state.left} / ${state.total}</b><span>Misses: ${state.miss}</span><span>${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</span><button id="quit">Menu</button>`;
+}
+
+function under(x,y){ const el = document.elementFromPoint(x,y); return el && el.classList && el.classList.contains('c') ? el : null; }
+let hotEl = null;
+function hot(x,y){ const el = under(x,y); if (el===hotEl) return; hotEl && hotEl.classList.remove('hot'); hotEl = el; el && !el.classList.contains('ok') && el.classList.add('hot'); }
+
+function onDown(e){
+  const it = e.target.closest('.it'); if (!it) return;
+  e.preventDefault(); it.setPointerCapture(e.pointerId);
+  const gh = it.cloneNode(true); gh.className = 'it ghost'; document.body.append(gh); it.classList.add('lift');
+  const mv = ev => { gh.style.left = ev.clientX+'px'; gh.style.top = ev.clientY+'px'; hot(ev.clientX, ev.clientY); };
+  const end = (ev, cancel) => {
+    it.onpointermove = it.onpointerup = it.onpointercancel = null; gh.remove(); it.classList.remove('lift');
+    hot(-1,-1);
+    if (!cancel) drop(it, ev.clientX, ev.clientY);
+  };
+  mv(e);
+  it.onpointermove = mv; it.onpointerup = ev => end(ev,false); it.onpointercancel = ev => end(ev,true);
+}
+
+function drop(it, x, y){
+  if (x > innerWidth - Math.min(250, innerWidth*.42)) return; // dropped back on the list
+  const k = it.dataset.k, el = under(x,y); let ok = false;
+  if (k[0]==='c'){
+    ok = !!el && el.dataset.i === k.slice(1);
+    if (ok) el.classList.add('ok');
+  } else if (!el){
+    const o = OCEANS[+k.slice(1)], p = d3.zoomTransform(svg.node()).invert([x,y]), ll = proj.invert(p);
+    if (ll && isFinite(ll[0]) && d3.geoDistance(ll,[o[1],o[2]]) < o[3]){
+      ok = true;
+      const c = proj([o[1],o[2]]);
+      g.append('text').attr('class','oc').attr('x',c[0]).attr('y',c[1]).attr('font-size',15/d3.zoomTransform(svg.node()).k).text(o[0]);
+    }
+  }
+  if (ok){ it.remove(); if (!--state.left) finish(); else hud(); return; }
+  state.miss++; hud();
+  it.classList.add('shake'); setTimeout(() => it.classList.remove('shake'), 300);
+  if (el && !el.classList.contains('ok')){ el.classList.add('bad'); setTimeout(() => el.classList.remove('bad'), 500); }
+}
+
+function finish(){
+  clearInterval(timer);
+  const s = Math.floor((Date.now() - state.t0)/1000), p = $('#panel');
+  $('#side').hidden = $('#hud').hidden = true;
+  p.hidden = false;
+  p.innerHTML = `<h1>Map complete</h1><p>${state.total} placed in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} with ${state.miss} misses.</p>
+  <div style="flex:1"></div><button class="go" id="again">Back to menu</button>`;
+  p.onclick = e => { if (e.target.id==='again') menu(); };
+  p.onchange = null;
+}
+</script>
+</body>
+</html>
