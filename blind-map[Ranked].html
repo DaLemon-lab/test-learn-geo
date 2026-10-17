@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blind Map</title>
+<style>
+:root{--sea:#6fa6dd;--ink:#1b2a3a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sea);font:15px/1.4 "Trebuchet MS",Verdana,sans-serif;color:var(--ink)}
+svg{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+.c{fill:#fff;stroke:#333;stroke-width:.6;vector-effect:non-scaling-stroke}
+.c.off{fill:#dcdcdc}
+.c.hot{fill:#ffe9a0}
+.c.ok{fill:#8fd694}
+.c.bad{fill:#f4a0a0}
+.oc{fill:#123e73;font-style:italic;text-anchor:middle;paint-order:stroke;stroke:#ffffffaa;stroke-width:3px}
+.box{background:rgba(255,255,255,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 8px 30px #0004;border:1px solid #fff9}
+#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(94vw,94vh,640px);aspect-ratio:1;padding:22px;display:flex;flex-direction:column;gap:10px;z-index:5}
+#panel h1{margin:0;font-size:28px;letter-spacing:.5px}
+#panel p{margin:0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit;background:#fff;border:1px solid #333;padding:5px 10px;cursor:pointer}
+button:hover{background:#ffe9a0}
+button:focus-visible,input:focus-visible{outline:3px solid #123e73;outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row span{margin-inline-start:auto}
+#q{font:inherit;padding:9px 12px;border:1px solid #333;background:#fff;width:100%}
+.res{max-height:132px;overflow:auto;background:#fff;border:1px solid #333;display:flex;flex-direction:column}
+.res button{border:0;border-bottom:1px solid #3332;text-align:left;padding:6px 12px}
+.res button.on{background:#d4efd6}
+.res p{padding:6px 12px;color:#555}
+.picked{flex:1;min-height:0;overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;padding:8px;background:#fff8;border:1px solid #3334}
+.picked p{color:#444}
+.tag{background:#fff;border:1px solid #333;padding:3px 9px}
+.go{background:#1d4f8a;color:#fff;border-color:#123e73;padding:10px;font-size:17px}
+.go:hover{background:#2a66ad}
+.go:disabled{opacity:.5;cursor:not-allowed}
+#hud{position:fixed;left:12px;top:12px;padding:10px 14px;z-index:4;display:flex;gap:14px;align-items:center}
+#side{position:fixed;right:12px;top:62px;bottom:12px;width:min(230px,42vw);padding:8px;overflow:auto;z-index:4}
+.it{padding:8px 10px;margin:0 0 5px;background:#fff;border:1px solid #333;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
+.it.lift{opacity:.35}
+.it.shake{animation:sh .3s}
+.ghost{position:fixed;transform:translate(-50%,-50%);pointer-events:none;z-index:9;box-shadow:0 6px 16px #0006;width:200px;margin:0}
+@keyframes sh{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@media (prefers-reduced-motion:reduce){.it.shake{animation:none}}
+
+#panel.auto{aspect-ratio:auto;height:auto;max-height:94vh;overflow:auto}
+#panel.tall{aspect-ratio:auto;height:min(96vh,900px);overflow:auto}
+.picked{min-height:70px}
+button.on{background:#d4efd6;border-color:#1d4f8a;font-weight:bold}
+#me{position:fixed;right:12px;top:12px;z-index:7;display:flex;align-items:center;gap:8px;padding:4px 14px 4px 4px;border-radius:999px;max-width:220px}
+#me span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;object-fit:cover;color:#fff;font-weight:bold;flex:none}
+#pm{position:fixed;inset:0;background:#0006;z-index:20;display:flex;align-items:center;justify-content:center}
+#pm .card{padding:20px;width:min(92vw,340px);display:flex;flex-direction:column;gap:12px}
+#pm input[type=text],#jc{font:inherit;padding:9px 12px;border:1px solid #333;background:#fff;width:100%}
+#jc{flex:1;text-transform:uppercase;letter-spacing:3px}
+.pav{display:flex;justify-content:center}
+.btn{display:inline-block;background:#fff;border:1px solid #333;padding:5px 10px;cursor:pointer}
+.btn:hover{background:#ffe9a0}
+.rhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.code{font-weight:bold;letter-spacing:4px;font-size:20px;padding:2px 10px}
+.muted{color:#555}
+.err{color:#b3261e;margin:0;min-height:0}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tm{background:#fff8;border:1px solid #3334;padding:6px;min-height:60px}
+.th{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:4px}
+.t0,.tm.t0 .th{color:#1d4f8a}.t1,.tm.t1 .th{color:#b4501f}
+.tcol{font-weight:bold}
+.pl{display:flex;align-items:center;gap:8px;padding:3px 0}
+.plist{display:flex;flex-wrap:wrap;gap:4px 18px}
+.it.taken{opacity:.4;pointer-events:none;outline:2px solid rgba(30,110,255,.6)}
+.it.taken::after{content:attr(data-by);float:right;font-size:11px}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat,.mvp{background:#fff;border:1px solid #333;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.mvp{background:#fff3c4;border-color:#b08a00}
+.ct{font-weight:bold}
+.cw{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.w{display:inline-flex;align-items:center;gap:6px}
+.cv{color:#555;font-size:13px}
+.curs,.rc{pointer-events:none}
+.rc{transition:transform .09s linear}
+.cp{fill:rgba(30,110,255,.45);stroke:rgba(20,70,200,.75);stroke-width:1}
+.cn{font-size:11px;fill:#123e73;paint-order:stroke;stroke:#fffb;stroke-width:3px}
+.ci rect{fill:rgba(30,110,255,.35);stroke:rgba(20,70,200,.7)}
+.ci text{font-size:12px;fill:#0b2a5c;paint-order:stroke;stroke:#fffb;stroke-width:2px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1b2a3a;color:#fff;padding:9px 16px;z-index:30}
+@media (max-width:520px){.cats,.teams{grid-template-columns:1fr}}
+
+.rb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-weight:bold;color:#fff;flex:none;border:2px solid #0003}
+.bar{height:10px;background:#fff;border:1px solid #333;margin-top:6px}.bar i{display:block;height:100%;background:#1d4f8a}
+.rkcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid #333;padding:10px}
+.lad{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.lad>div,.lad>button{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#fff8;text-align:start}
+.lad>div small,.lad>button small{margin-inline-start:auto}
+.lad .me{outline:2px solid #1d4f8a;background:#fff}
+.lad.one{grid-template-columns:1fr}.lad .botb{background:#fff;border:1px solid #333}
+.rkb{display:inline-flex;align-items:center;gap:6px}
+.bt{background:#b4501f;border-color:#8a3a12}.bt:hover{background:#cf642f}
+#pm .card.wide{width:min(94vw,580px);max-height:90vh;overflow:auto}
+.opt{display:flex;gap:10px;align-items:flex-start;cursor:pointer}.opt input{margin-top:5px;width:18px;height:18px}
+.lbc{display:flex;flex-direction:column;gap:10px}
+.lbt{width:100%;border-collapse:collapse;background:#fff}.lbt th,.lbt td{padding:5px 8px;border-bottom:1px solid #3332;text-align:start}
+.lbt tr.me{background:#d4efd6}
+.sep{width:12px}
+#tip{position:fixed;transform:translate(16px,18px);pointer-events:none;z-index:9;background:#fff;border:1px solid #333;padding:4px 12px;font-weight:bold;font-size:17px;box-shadow:0 6px 16px #0005;white-space:nowrap}
+#tip.shake{animation:sh .3s}
+.want{font-weight:bold;color:#1d4f8a}.botp{color:#b4501f;font-weight:bold}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<svg id="map"></svg>
+<div id="hud" class="box" hidden></div>
+<div id="side" class="box" hidden></div>
+<button id="me" class="box"></button>
+<div id="pm" hidden></div>
+<div id="toast" hidden></div>
+<div id="tip" hidden></div>
+<div id="panel" class="box"><h1>Blind Map</h1><p>Loading the map… (needs an internet connection)</p></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.0.1/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const MODES = ['World','Europe','Asia','Africa','North America','South America','Americas','Oceania','Oceans only','Test'];
+const MODE_HE = {World:'עולם',Europe:'אירופה',Asia:'אסיה',Africa:'אפריקה','North America':'צפון אמריקה','South America':'דרום אמריקה',Americas:'אמריקה',Oceania:'אוקיאניה','Oceans only':'אוקיינוסים בלבד',Test:'מבחן'};
+const TEST = ['Israel','Lebanon','Syria','Jordan','Egypt','Turkey','Sudan','Iran','Iraq','Saudi Arabia','Yemen','Oman','United Arab Emirates','Kuwait','Qatar','Ethiopia','Eritrea'];
+const OCHE = ['האוקיינוס האטלנטי הצפוני','האוקיינוס האטלנטי הדרומי','האוקיינוס השקט הצפוני','האוקיינוס השקט הדרומי','האוקיינוס ההודי','האוקיינוס הארקטי','האוקיינוס הדרומי'];
+const HE_X = {Kosovo:'קוסובו','N. Cyprus':'צפון קפריסין',Somaliland:'סומלילנד','United Arab Emirates':'איחוד האמירויות'};
+const CODES = '242FJ834TZ732EH124CA840US398KZ860UZ598PG360ID032AR152CL180CD706SO404KE729SD148TD332HT214DO643RU044BS238FK578NO304GL260TF626TL710ZA426LS484MX858UY076BR068BO604PE170CO591PA188CR558NI340HN222SV320GT084BZ862VE328GY740SR250FR218EC630PR388JM192CU716ZW072BW516NA686SN466ML478MR204BJ562NE566NG120CM768TG288GH384CI324GN624GW430LR694SL854BF140CF178CG266GA226GQ894ZM454MW508MZ748SZ024AO108BI376IL422LB450MG275PS270GM788TN012DZ400JO784AE634QA414KW368IQ512OM548VU116KH764TH418LA104MM704VN408KP410KR496MN356IN050BD064BT524NP586PK004AF762TJ417KG795TM364IR760SY051AM752SE112BY804UA616PL040AT348HU498MD642RO440LT428LV233EE276DE100BG300GR792TR008AL191HR756CH442LU056BE528NL620PT724ES372IE540NC090SB554NZ036AU144LK156CN158TW380IT208DK826GB352IS031AZ268GE608PH458MY096BN705SI246FI703SK203CZ232ER392JP600PY887YE682SA010AQ196CY504MA818EG434LY231ET262DJ800UG646RW070BA807MK688RS499ME780TT728SS';
+const T = {
+  en:{title:'Blind Map',sub:'Search for countries or choose a mode, press Start, then drag each name onto the map.',all:'Pick all',none:'Clear',oc:'+ Oceans',ph:'Search countries…',nomatch:'No country matches that search.',empty:'No countries picked yet.',start:'Start',menu:'Menu',miss:'Misses',done:'Map complete',back:'Back to menu',rm:'Remove',
+    cnt:(n,o)=>n+' countries'+(o?' + 7 oceans':''),res:(n,t,m)=>`${n} placed in ${t} with ${m} misses.`},
+  he:{title:'מפה עיוורת',sub:'חפשו מדינות או בחרו מצב, לחצו על התחל, ואז גררו כל שם למקומו על המפה.',all:'בחר הכול',none:'נקה',oc:'+ אוקיינוסים',ph:'חיפוש מדינות…',nomatch:'לא נמצאה מדינה תואמת.',empty:'עדיין לא נבחרו מדינות.',start:'התחל',menu:'תפריט',miss:'טעויות',done:'המפה הושלמה',back:'חזרה לתפריט',rm:'הסר',
+    cnt:(n,o)=>n+' מדינות'+(o?' + 7 אוקיינוסים':''),res:(n,t,m)=>`${n} פריטים הונחו תוך ${t} עם ${m} טעויות.`}
+};
+Object.assign(T.en,{"mp": "Multiplayer", "mpsub": "Create a room and share the code, or enter a friend's code to join.", "create": "Create room", "or": "or", "codeph": "Room code", "join": "Join", "nettip": "Players connect directly over the internet; everyone needs to open this page.", "room": "Room", "casual": "Casual", "vs": "VS", "casD": "Everyone plays together on one shared map. You see your friends' cursors and what they carry.", "vsD": "Two teams race on their own map. The first team to finish wins. You see your teammates' cursors.", "team": "Team", "joinTeam": "Join", "shuffle": "Shuffle teams", "copy": "Copy code", "copied": "Code copied", "leave": "Leave", "you": "you", "waitHost": "Waiting for the host to start…", "items": "items to place", "need2": "VS needs at least one player on each team.", "connecting": "Connecting…", "notfound": "Room not found.", "started": "That game has already started.", "full": "That room is full.", "neterr": "Connection failed. Check your internet and try again.", "hostleft": "The host closed the room.", "opp": "Opponent", "profile": "Your profile", "name": "Name", "photo": "Choose photo", "rmphoto": "Remove photo", "save": "Save", "won": "Your team won!", "lost": "Your team lost", "vsWin": "Team {n} wins", "tolobby": "Back to lobby", "mvp": "MVP", "c_guess": "Most guessed", "c_miss": "Most misses", "c_acc": "Sharpest aim", "c_fast": "Fastest hands", "c_slow": "Slowest thinker", "nomiss": "Nobody missed!", "avg": "avg per item", "settings": "Settings", "langL": "Language", "rand": "Randomize countries", "randD": "The list is shuffled instead of A to Z.", "nolist": "No list mode", "nolistD": "A country name follows your cursor. Click where it is on the map.", "mpNote": "In multiplayer the list is always random.", "close": "Close", "lb": "Leaderboard", "lbEmpty": "No runs yet. Be the first!", "lbNote": "Saved on this device. Score = time + 5s per miss.", "listM": "List", "noListM": "No list", "azM": "A–Z", "randM": "Random", "time": "Time", "score": "Score", "player": "Player", "rankL": "Rank", "ranked": "Ranked 1v1", "rankedS": "Ranked", "rankedD": "Race {b} on {n} countries. Click each one as it appears. Win +{w} RP, lose −{l} RP. Bots get faster as you climb.", "playRanked": "Play ranked", "botMode": "vs Bot", "pickBot": "Choose the bot's difficulty. It uses your map selection and settings.", "persec": "s / item", "winRace": "You win! 🏆", "loseRace": "{b} won the race", "lostDesc": "You placed {n} of {m}.", "rankUp": "Rank up!", "cookieUp": "🍪 You are now The Cookie. It is, in fact, just a cookie. Please do not eat it.", "cookieYou": "🍪 You are The Cookie. It is just a cookie, but it is yours.", "forfeit": "Forfeited, counted as a loss.", "forfeitB": "Forfeit", "newBest": "new best", "best": "best", "wins": "Wins", "losses": "Losses", "playAgain": "Play again", "needSel": "Pick some countries first."});
+Object.assign(T.he,{"mp": "רב משתתפים", "mpsub": "צרו חדר ושתפו את הקוד, או הכניסו קוד של חבר כדי להצטרף.", "create": "צור חדר", "or": "או", "codeph": "קוד חדר", "join": "הצטרף", "nettip": "השחקנים מתחברים ישירות דרך האינטרנט; כולם צריכים לפתוח את הדף הזה.", "room": "חדר", "casual": "משותף", "vs": "קבוצה נגד קבוצה", "casD": "כולם משחקים יחד על מפה אחת. רואים את הסמנים של החברים ומה שהם מחזיקים.", "vsD": "שתי קבוצות מתחרות על מפה משלהן. הקבוצה שמסיימת ראשונה מנצחת. רואים את הסמנים של חברי הקבוצה.", "team": "קבוצה", "joinTeam": "הצטרף", "shuffle": "ערבב קבוצות", "copy": "העתק קוד", "copied": "הקוד הועתק", "leave": "עזוב", "you": "אתה", "waitHost": "ממתינים שהמארח יתחיל…", "items": "פריטים להנחה", "need2": "מצב נגד דורש לפחות שחקן אחד בכל קבוצה.", "connecting": "מתחבר…", "notfound": "החדר לא נמצא.", "started": "המשחק כבר התחיל.", "full": "החדר מלא.", "neterr": "החיבור נכשל. בדקו את האינטרנט ונסו שוב.", "hostleft": "המארח סגר את החדר.", "opp": "יריבים", "profile": "הפרופיל שלך", "name": "שם", "photo": "בחר תמונה", "rmphoto": "הסר תמונה", "save": "שמור", "won": "הקבוצה שלך ניצחה!", "lost": "הקבוצה שלך הפסידה", "vsWin": "קבוצה {n} ניצחה", "tolobby": "חזרה לחדר", "mvp": "השחקן המצטיין", "c_guess": "הכי הרבה נכונים", "c_miss": "הכי הרבה טעויות", "c_acc": "הכי מדויק", "c_fast": "הכי מהיר", "c_slow": "הכי איטי", "nomiss": "אף אחד לא טעה!", "avg": "ממוצע לפריט", "settings": "הגדרות", "langL": "שפה", "rand": "ערבוב מדינות", "randD": "הרשימה מעורבבת במקום א׳ עד ת׳.", "nolist": "מצב ללא רשימה", "nolistD": "שם של מדינה עוקב אחרי הסמן. לחצו על המקום שלה במפה.", "mpNote": "במשחק מרובה משתתפים הרשימה תמיד אקראית.", "close": "סגור", "lb": "לוח תוצאות", "lbEmpty": "עדיין אין תוצאות. היו הראשונים!", "lbNote": "נשמר במכשיר הזה. ציון = זמן + 5 שניות לכל טעות.", "listM": "עם רשימה", "noListM": "ללא רשימה", "azM": "א׳–ת׳", "randM": "אקראי", "time": "זמן", "score": "ציון", "player": "שחקן", "rankL": "דרגה", "ranked": "דירוגי 1 על 1", "rankedS": "דירוגי", "rankedD": "התחרו ב{b} על {n} מדינות. לחצו על כל מדינה כשהיא מופיעה. ניצחון +{w} נק׳, הפסד −{l} נק׳. הבוטים מהירים יותר ככל שעולים.", "playRanked": "שחק דירוגי", "botMode": "נגד בוט", "pickBot": "בחרו את רמת הקושי של הבוט. הוא משתמש בבחירת המפה ובהגדרות שלכם.", "persec": " שנ׳ / פריט", "winRace": "ניצחתם! 🏆", "loseRace": "{b} ניצח במרוץ", "lostDesc": "הנחתם {n} מתוך {m}.", "rankUp": "עלייה בדרגה!", "cookieUp": "🍪 אתם עכשיו העוגייה. זו באמת רק עוגייה. בבקשה אל תאכלו אותה.", "cookieYou": "🍪 אתם העוגייה. זו רק עוגייה, אבל היא שלכם.", "forfeit": "ויתרתם, נחשב להפסד.", "forfeitB": "ויתור", "newBest": "שיא חדש", "best": "שיא", "wins": "ניצחונות", "losses": "הפסדים", "playAgain": "שחק שוב", "needSel": "בחרו קודם כמה מדינות."});
+let lang = 'en'; try { lang = localStorage.getItem('bm-lang') || 'en'; } catch(e){}
+const t = k => T[lang][k];
+const nm = f => lang==='he' ? f.he : f.properties.name;
+const oname = i => lang==='he' ? OCHE[i] : OCEANS[i][0];
+const modeLabel = m => lang==='he' ? MODE_HE[m] : m;
+function applyDir(){ ['panel','hud','side'].forEach(id => $('#'+id).dir = lang==='he' ? 'rtl' : 'ltr'); document.documentElement.lang = lang; }
+// [name, lon, lat, tolerance in radians]
+const OCEANS = [['North Atlantic',-40,30,.4],['South Atlantic',-15,-22,.4],['North Pacific',-150,25,.5],['South Pacific',-125,-28,.5],['Indian Ocean',80,-22,.45],['Arctic Ocean',90,80,.35],['Southern Ocean',30,-63,.3]];
+
+let feats = [], sel = new Set(), oceans = false;
+let svg, g, proj, path, zoom, state = null, timer;
+
+function regionOf(f){
+  const [lo,la] = d3.geoCentroid(f), n = f.properties.name;
+  if (n === 'Russia') return ['Europe','Asia'];
+  if (lo < -30) return la < 0 && lo < -140 ? ['Oceania'] : [la > 7.8 ? 'North America' : 'South America'];
+  if (la < 0 && lo > 128) return ['Oceania'];
+  if ((lo < 34 && la < 34.8) || (lo >= 34 && lo < 52 && la < 16.5 && !(la > 12 && lo > 44))) return ['Africa'];
+  if (lo <= 33 && la >= 35) return ['Europe'];
+  return ['Asia'];
+}
+const inMode = (f,m) => m==='World' || (m==='Test' && TEST.includes(f.properties.name)) || (m==='Americas' ? f.regs.some(r=>/America/.test(r)) : f.regs.includes(m));
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(topo => {
+  feats = topojson.feature(topo, topo.objects.countries).features;
+  const code = {}; for (const m of CODES.matchAll(/(\d{3})([A-Z]{2})/g)) code[m[1]] = m[2];
+  let dn = null; try { dn = new Intl.DisplayNames(['he'], {type:'region'}); } catch(e){}
+  feats.forEach((f,i) => {
+    f.i = i; f.regs = regionOf(f); f.play = !/Antarc/.test(f.properties.name);
+    const n = f.properties.name; let he = HE_X[n];
+    if (!he && dn && code[f.id]) { try { he = dn.of(code[f.id]); } catch(e){} }
+    f.he = he || n;
+  });
+  menu();
+}).catch(() => { $('#panel').innerHTML = '<h1>Blind Map</h1><p>Could not load the map data. Check your internet connection and reload.</p>'; });
+
+// ================= state =================
+let LL = false, curMode = null, scr = 'menu', playing = false, G = null, mp = null, cl = null, cur = {}, curK = 1, mpSnap = null, curDrag = null, lastSend = 0, lastNull = false, mpPlaced = new Set();
+const sideW = () => LL ? 0 : Math.min(250, innerWidth * .42);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let tt; function toast(s){ const e = $('#toast'); e.textContent = s; e.hidden = false; clearTimeout(tt); tt = setTimeout(() => e.hidden = true, 2800); }
+const itemName = k => k[0] === 'c' ? nm(feats[+k.slice(1)]) : oname(+k.slice(1));
+
+// ================= profile =================
+const AVC = ['#e07a5f','#3d85c6','#6aa84f','#8e7cc3','#e69138','#c2528b','#45818e','#a64d79'];
+let prof = {name:'Player' + (100 + Math.floor(Math.random() * 900)), pfp:null};
+try { const s = JSON.parse(localStorage.getItem('bm-prof')); if (s && s.name) prof = {name:String(s.name).slice(0,18), pfp:s.pfp || null}; } catch(e){}
+const saveProf = () => { try { localStorage.setItem('bm-prof', JSON.stringify(prof)); } catch(e){} };
+const cleanName = n => (String(n || '').trim().slice(0,18)) || 'Player';
+const cleanPfp = p => (typeof p === 'string' && p.length < 40000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(p)) ? p : null;
+function av(p, sz){
+  sz = sz || 32;
+  if (p.pfp) return `<img class="av" style="width:${sz}px;height:${sz}px" src="${p.pfp}" alt="">`;
+  let h = 0; for (const ch of p.name) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return `<span class="av" style="width:${sz}px;height:${sz}px;background:${AVC[Math.abs(h) % AVC.length]};font-size:${Math.round(sz * .5)}px">${esc([...p.name][0] || '?').toUpperCase()}</span>`;
+}
+function renderMe(){ $('#me').innerHTML = av(prof, 30) + `<span>${esc(prof.name)}</span>`; $('#me').setAttribute('aria-label', t('profile')); }
+function openProf(){
+  let tmp = prof.pfp; const pm = $('#pm'); pm.hidden = false;
+  pm.innerHTML = `<div class="box card"><div class="top"><h2 style="margin:0">${t('profile')}</h2><button data-x="close" aria-label="close">✕</button></div>
+  <div class="pav" id="pav"></div>
+  <div class="row" style="justify-content:center"><label class="btn">${t('photo')}<input type="file" accept="image/*" id="pf" hidden></label><button data-x="rmp">${t('rmphoto')}</button></div>
+  <label>${t('name')}<br><input id="pn" type="text" maxlength="18" value="${esc(prof.name)}"></label>
+  <button class="go" data-x="save">${t('save')}</button></div>`;
+  const upd = () => { $('#pav').innerHTML = av({name:cleanName($('#pn').value), pfp:tmp}, 84); };
+  upd(); pm.dir = lang === 'he' ? 'rtl' : 'ltr';
+  $('#pn').oninput = upd;
+  $('#pf').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const img = new Image(), url = URL.createObjectURL(f);
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = c.height = 96; const s = Math.min(img.width, img.height);
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 96, 96);
+      tmp = c.toDataURL('image/jpeg', .82); URL.revokeObjectURL(url); upd();
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  };
+  pm.onclick = e => {
+    if (e.target === pm) { pm.hidden = true; return; }
+    const x = e.target.closest('button'); if (!x) return; const a = x.dataset.x;
+    if (a === 'close') pm.hidden = true;
+    else if (a === 'rmp') { tmp = null; upd(); }
+    else if (a === 'save') {
+      prof = {name:cleanName($('#pn').value), pfp:tmp}; saveProf(); renderMe(); pm.hidden = true;
+      if (mp) act({t:'prof', name:prof.name, pfp:prof.pfp});
+    }
+  };
+  $('#pn').focus();
+}
+
+// ================= settings / ranks / leaderboards / bot =================
+let SET = {rand:false, nolist:false};
+try { Object.assign(SET, JSON.parse(localStorage.getItem('bm-set')) || {}); } catch(e){}
+const saveSet = () => { try { localStorage.setItem('bm-set', JSON.stringify(SET)); } catch(e){} };
+const uid = (() => { try { let u = localStorage.getItem('bm-uid'); if (!u){ u = Math.random().toString(36).slice(2,10) + Date.now().toString(36); localStorage.setItem('bm-uid', u); } return u; } catch(e){ return 'anon'; } })();
+let lb = {boards:{}, ranked:{}};
+try { const s = JSON.parse(localStorage.getItem('bm-lb')); if (s && s.boards) lb = {boards:s.boards, ranked:s.ranked || {}}; } catch(e){}
+const saveLB = () => { try { localStorage.setItem('bm-lb', JSON.stringify(lb)); } catch(e){} };
+let rk = {rp:0, w:0, l:0};
+try { const s = JSON.parse(localStorage.getItem('bm-rank')); if (s && isFinite(s.rp)) rk = {rp:s.rp, w:s.w || 0, l:s.l || 0}; } catch(e){}
+const saveRk = () => { try { localStorage.setItem('bm-rank', JSON.stringify(rk)); } catch(e){} };
+const fmtT = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+// ---- ranks ----
+const RANKS = [['Bronze','#cd7f32'],['Silver','#b8c0c8'],['Gold','#f2c230'],['Platinum','#4fd1c5'],['Diamond','#4cc3ff'],['Master','#b46bff'],['Grandmaster','#ff5a5f'],['Obsidian','#2a2233'],['The Cookie','#e8c48f']];
+const RANK_HE = ['ארד','כסף','זהב','פלטינה','יהלום','אלוף','גרנד מאסטר','אובסידיאן','העוגייה'];
+const RP_AT = [0,100,250,450,700,1000,1400,1900,2500];
+const BOT = [[9,.30],[7.2,.25],[5.8,.20],[4.7,.16],[3.8,.12],[3.0,.08],[2.4,.05],[1.9,.03],[0.8,0]]; // [avg seconds per item, miss chance]
+const RK_N = [10,10,12,12,14,14,16,18,20], RK_WIN = [30,28,26,24,22,20,18,16,15], RK_LOSE = [0,12,14,16,18,20,22,24,26];
+const rankOf = rp => { let i = 0; RP_AT.forEach((v,j) => { if (rp >= v) i = j; }); return i; };
+const rankName = i => lang === 'he' ? RANK_HE[i] : RANKS[i][0];
+const botNameOf = i => (i === 8 ? '🍪 ' : '🤖 ') + rankName(i);
+function badge(i, sz){
+  sz = sz || 26;
+  if (i === 8) return `<span class="rb" style="width:${sz}px;height:${sz}px;font-size:${Math.round(sz*.6)}px;background:#e8c48f">🍪</span>`;
+  return `<span class="rb" style="width:${sz}px;height:${sz}px;font-size:${Math.round(sz*.5)}px;background:${RANKS[i][1]};color:${i===7?'#c9a0ff':'#fff'};${i===7?'box-shadow:0 0 7px #7b3fe4;':''}">${i+1}</span>`;
+}
+function syncRanked(){ lb.ranked[uid] = {name:prof.name, pfp:prof.pfp, rp:rk.rp, w:rk.w, l:rk.l}; saveLB(); }
+function applyRanked(lost){
+  const bi = rankOf(rk.rp), before = rk.rp;
+  if (lost){ rk.rp = Math.max(0, rk.rp - RK_LOSE[bi]); rk.l++; } else { rk.rp += RK_WIN[bi]; rk.w++; }
+  saveRk(); syncRanked();
+  return {bi, ai:rankOf(rk.rp), delta:rk.rp - before};
+}
+
+// ---- generic modal (reuses #pm) ----
+function modalOpen(html, onclick){
+  const pm = $('#pm'); pm.hidden = false; pm.dir = lang === 'he' ? 'rtl' : 'ltr'; pm.innerHTML = html;
+  pm.onclick = e => { if (e.target === pm){ pm.hidden = true; return; } const x = e.target.closest('button'); if (x) onclick(x.dataset, x); };
+  return pm;
+}
+function openSettings(){
+  const chk = (id, on, lab, desc) => `<label class="opt"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span><b>${lab}</b><br><small class="muted">${desc}</small></span></label>`;
+  modalOpen(`<div class="box card"><div class="top"><h2 style="margin:0">⚙ ${t('settings')}</h2><button data-x="close" aria-label="close">✕</button></div>
+  <div><b>${t('langL')}</b><div class="chips" style="margin-top:6px"><button data-lg="en" class="${lang==='en'?'on':''}">English</button><button data-lg="he" class="${lang==='he'?'on':''}">עברית</button></div></div>
+  ${chk('s-rand', SET.rand, t('rand'), t('randD'))}${chk('s-nol', SET.nolist, t('nolist'), t('nolistD'))}
+  <p class="muted" style="margin:0"><small>${t('mpNote')}</small></p>
+  <button class="go" data-x="close">${t('close')}</button></div>`, d => {
+    if (d.x === 'close') $('#pm').hidden = true;
+    else if (d.lg){ lang = d.lg; try { localStorage.setItem('bm-lang', lang); } catch(e){} renderMe(); if (scr === 'menu') menu(); openSettings(); }
+  });
+  $('#s-rand').onchange = e => { SET.rand = e.target.checked; saveSet(); };
+  $('#s-nol').onchange = e => { SET.nolist = e.target.checked; saveSet(); };
+}
+
+// ---- leaderboards (stored on this device) ----
+let lbs = {tab:'World', nolist:false, rand:false};
+const lbKey = (m, n, r) => `${m}|${n ? 1 : 0}|${r ? 1 : 0}`;
+const lbRows = key => Object.entries(lb.boards[key] || {}).map(([u,v]) => ({uid:u, ...v})).sort((a,b) => a.score - b.score || a.time - b.time);
+function openLB(){
+  for (const k in lb.boards) if (lb.boards[k][uid]){ lb.boards[k][uid].name = prof.name; lb.boards[k][uid].pfp = prof.pfp; }
+  if (lb.ranked[uid]){ lb.ranked[uid].name = prof.name; lb.ranked[uid].pfp = prof.pfp; }
+  const draw = () => {
+    const tabs = [...MODES, 'Ranked'];
+    let body;
+    if (lbs.tab === 'Ranked'){
+      const rows = Object.entries(lb.ranked).map(([u,v]) => ({uid:u, ...v})).sort((a,b) => b.rp - a.rp).slice(0, 15);
+      body = rows.length ? `<table class="lbt"><tr><th>#</th><th>${t('player')}</th><th>${t('rankL')}</th><th>RP</th><th>${t('wins')}/${t('losses')}</th></tr>${rows.map((r,i) => `<tr class="${r.uid===uid?'me':''}"><td>${i+1}</td><td><span class="w">${av(r,24)}${esc(r.name)}</span></td><td><span class="w">${badge(rankOf(r.rp),22)}${esc(rankName(rankOf(r.rp)))}</span></td><td>${r.rp}</td><td>${r.w}/${r.l}</td></tr>`).join('')}</table>` : `<p class="muted">${t('lbEmpty')}</p>`;
+    } else {
+      const rows = lbRows(lbKey(lbs.tab, lbs.nolist, lbs.rand)).slice(0, 15);
+      body = rows.length ? `<table class="lbt"><tr><th>#</th><th>${t('player')}</th><th>${t('time')}</th><th>${t('miss')}</th><th>${t('score')}</th></tr>${rows.map((r,i) => `<tr class="${r.uid===uid?'me':''}"><td>${i+1}</td><td><span class="w">${av(r,24)}${esc(r.name)}</span></td><td dir="ltr">${fmtT(r.time)}</td><td>${r.miss}</td><td><b>${r.score}</b></td></tr>`).join('')}</table>` : `<p class="muted">${t('lbEmpty')}</p>`;
+    }
+    $('#lbc').innerHTML = `<div class="chips">${tabs.map(m => `<button data-lt="${m}" class="${lbs.tab===m?'on':''}">${m==='Ranked' ? '🏅 ' + t('rankedS') : modeLabel(m)}</button>`).join('')}</div>` +
+      (lbs.tab === 'Ranked' ? '' : `<div class="chips"><button data-ln="0" class="${!lbs.nolist?'on':''}">${t('listM')}</button><button data-ln="1" class="${lbs.nolist?'on':''}">${t('noListM')}</button><span class="sep"></span><button data-lr="0" class="${!lbs.rand?'on':''}">${t('azM')}</button><button data-lr="1" class="${lbs.rand?'on':''}">${t('randM')}</button></div>`) +
+      `<div class="lbbody">${body}</div><p class="muted" style="margin:0"><small>${t('lbNote')}</small></p>`;
+  };
+  modalOpen(`<div class="box card wide"><div class="top"><h2 style="margin:0">🏆 ${t('lb')}</h2><button data-x="close" aria-label="close">✕</button></div><div id="lbc" class="lbc"></div></div>`, d => {
+    if (d.x === 'close') $('#pm').hidden = true;
+    else if (d.lt){ lbs.tab = d.lt; draw(); }
+    else if (d.ln !== undefined){ lbs.nolist = d.ln === '1'; draw(); }
+    else if (d.lr !== undefined){ lbs.rand = d.lr === '1'; draw(); }
+  });
+  draw();
+}
+function recordRun(sec){
+  const key = lbKey(runMeta.mode, runMeta.nolist, runMeta.rand), score = Math.round((sec + 5 * state.miss) * 10) / 10;
+  lb.boards[key] = lb.boards[key] || {};
+  const prev = lb.boards[key][uid], isBest = !prev || score < prev.score, prevScore = prev ? prev.score : null;
+  if (isBest) lb.boards[key][uid] = {name:prof.name, pfp:prof.pfp, time:sec, miss:state.miss, score, at:Date.now()};
+  else { prev.name = prof.name; prev.pfp = prof.pfp; }
+  saveLB();
+  const pos = lbRows(key).findIndex(r => r.uid === uid) + 1;
+  return `<div class="mvp"><div class="ct">🏆 ${modeLabel(runMeta.mode)} · ${runMeta.nolist ? t('noListM') : t('listM')} · ${runMeta.rand ? t('randM') : t('azM')}</div>
+  <div class="cv">${t('score')}: <b>${score}</b> (${isBest ? t('newBest') : t('best') + ': ' + prevScore}) · #${pos}</div></div>`;
+}
+
+// ---- bot opponent ----
+let bot = null, ranked = false, runMeta = null, selBak = null, rankReg = '', queue = [], qi = 0;
+function startBot(tier, total){ stopBot(); bot = {tier, placed:0, total, tm:null}; botSched(); }
+function botSched(){
+  if (!bot) return; const [per, mis] = BOT[bot.tier];
+  let d = per * (.65 + .7 * Math.random()); if (Math.random() < mis) d += 1.2 + Math.random() * 1.3;
+  bot.tm = setTimeout(botStep, d * 1000);
+}
+function botStep(){ if (!bot || !playing) return; bot.placed++; hud(); if (bot.placed >= bot.total) finish(true); else botSched(); }
+function stopBot(){ if (bot) clearTimeout(bot.tm); bot = null; }
+function quitGame(){
+  if (mp) return leaveRoom();
+  if (ranked && bot && playing){ applyRanked(true); toast(t('forfeit')); }
+  menu();
+}
+function baseKeys(){
+  const keys = [...sel].map(i => 'c' + i); if (oceans) OCEANS.forEach((_,i) => keys.push('o' + i));
+  if (SET.rand) shuffle(keys); else keys.sort((a,b) => itemName(a).localeCompare(itemName(b), lang));
+  return keys;
+}
+function startBotGame(tier){
+  if (!sel.size && !oceans) return toast(t('needSel'));
+  ranked = false; runMeta = null; begin(baseKeys(), SET.nolist, tier);
+}
+function startRanked(){
+  if (!selBak) selBak = {sel:new Set(sel), oceans, curMode};
+  const bi = rankOf(rk.rp), reg = ['Europe','Asia','Africa','Americas'][Math.floor(Math.random() * 4)];
+  const pool = feats.filter(f => f.play && inMode(f, reg));
+  sel = new Set(pool.map(f => f.i)); oceans = false; rankReg = reg;
+  const keys = shuffle(pool.map(f => 'c' + f.i)).slice(0, RK_N[bi]);
+  ranked = true; runMeta = null; begin(keys, true, bi);
+}
+function openBotPick(){
+  if (!sel.size && !oceans) return toast(t('needSel'));
+  modalOpen(`<div class="box card wide"><div class="top"><h2 style="margin:0">⚔ ${t('botMode')}</h2><button data-x="close" aria-label="close">✕</button></div>
+  <p class="muted" style="margin:0">${t('pickBot')}</p>
+  <div class="lad one">${BOT.map((b,i) => `<button data-bt="${i}" class="botb">${badge(i,24)}<span>${esc(botNameOf(i))}</span><small class="muted">${b[0]}${t('persec')}</small></button>`).join('')}</div></div>`, d => {
+    if (d.x === 'close') $('#pm').hidden = true;
+    else if (d.bt !== undefined){ $('#pm').hidden = true; startBotGame(+d.bt); }
+  });
+}
+function rankedScreen(){
+  scr = 'ranked'; const p = $('#panel'); p.hidden = false; p.className = 'box auto'; applyDir();
+  if (rk.w + rk.l) syncRanked();
+  const i = rankOf(rk.rp), nx = i < 8 ? RP_AT[i + 1] : null, pct = nx ? Math.round((rk.rp - RP_AT[i]) / (nx - RP_AT[i]) * 100) : 100;
+  p.innerHTML = `<div class="top"><h1>${t('ranked')}</h1><button id="rb">${t('menu')}</button></div>
+  <div class="rkcard">${badge(i,56)}<div style="flex:1"><b style="font-size:20px">${esc(rankName(i))}</b><div class="muted">${rk.rp} RP${nx ? ' / ' + nx : ''} · ${t('wins')}: ${rk.w} · ${t('losses')}: ${rk.l}</div><div class="bar"><i style="width:${pct}%"></i></div></div></div>
+  <p>${t('rankedD').replace('{n}', RK_N[i]).replace('{w}', RK_WIN[i]).replace('{l}', RK_LOSE[i]).replace('{b}', botNameOf(i))}</p>
+  ${i === 8 ? `<p>${t('cookieYou')}</p>` : ''}
+  <div class="lad">${RANKS.map((r,j) => `<div class="${j===i?'me':''}">${badge(j,22)}<span>${esc(rankName(j))}</span><small class="muted">${RP_AT[j]}+ RP</small></div>`).join('')}</div>
+  <button class="go" id="play">⚔ ${t('playRanked')}</button>`;
+  p.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.id === 'rb') menu(); else if (b.id === 'play') startRanked(); };
+  p.oninput = p.onchange = p.onkeydown = null;
+}
+function rankResultHTML(r){
+  return `<div class="mvp"><div class="ct">${badge(r.bi,24)} ${esc(rankName(r.bi))}${r.ai !== r.bi ? ` → ${badge(r.ai,24)} ${esc(rankName(r.ai))}` : ''}</div>
+  <div class="cv">${r.delta >= 0 ? '+' : ''}${r.delta} RP · ${rk.rp} RP</div>
+  ${r.ai > r.bi ? `<div class="cw">⬆ ${t('rankUp')}</div>` : ''}${r.ai === 8 && r.bi < 8 ? `<div class="cw">${t('cookieUp')}</div>` : ''}</div>`;
+}
+
+// ---- no-list mode: the country follows the cursor, click where it is ----
+let lastPtr = {x:innerWidth/2, y:innerHeight/2};
+addEventListener('pointermove', e => { lastPtr = {x:e.clientX, y:e.clientY}; if (LL && playing) placeTip(); });
+function placeTip(){ const e = $('#tip'); e.style.left = lastPtr.x + 'px'; e.style.top = lastPtr.y + 'px'; }
+function showTip(){
+  const e = $('#tip'); if (!LL || !playing || !queue[qi]){ e.hidden = true; return; }
+  e.textContent = itemName(queue[qi]); e.hidden = false; placeTip();
+}
+function onPick(e){
+  if (!LL || !playing || !queue[qi] || mp) return;
+  const k = queue[qi], el = e.target.classList && e.target.classList.contains('c') ? e.target : null;
+  if (el && el.classList.contains('ok')) return;
+  let ok = false;
+  if (k[0] === 'c') ok = !!el && el.dataset.i === k.slice(1);
+  else if (!el){
+    const o = OCEANS[+k.slice(1)], q = d3.zoomTransform(svg.node()).invert([e.clientX, e.clientY]), ll = proj.invert(q);
+    if (ll && isFinite(ll[0]) && d3.geoDistance(ll, [o[1], o[2]]) < o[3]) ok = true;
+  }
+  if (ok){
+    markPlaced(k); qi++;
+    if (!--state.left) return finish();
+    showTip(); hud();
+  } else {
+    state.miss++; hud();
+    if (el){ el.classList.add('bad'); setTimeout(() => el.classList.remove('bad'), 500); }
+    const tp = $('#tip'); tp.classList.add('shake'); setTimeout(() => tp.classList.remove('shake'), 300);
+  }
+}
+
+// ================= menu =================
+function menu(){
+  clearInterval(timer); playing = false; scr = 'menu'; stopBot(); ranked = false; LL = false; $('#tip').hidden = true; $('#pm').hidden = true;
+  if (selBak){ sel = selBak.sel; oceans = selBak.oceans; curMode = selBak.curMode; selBak = null; }
+  $('#hud').hidden = $('#side').hidden = true;
+  svg = d3.select('#map'); svg.selectAll('*').remove(); cl = null; drawMap(false);
+  if (mp && !mp.host) return lobbyClient();
+  const list = feats.filter(f => f.play).sort((a,b) => nm(a).localeCompare(nm(b), lang));
+  const p = $('#panel'); p.hidden = false; p.className = 'box tall'; applyDir();
+  p.innerHTML = `<div class="top"><h1>${t('title')}</h1><div class="row"><button id="setb">⚙ ${t('settings')}</button><button id="lbb">🏆 ${t('lb')}</button>${mp ? '' : `<button id="mpb">${t('mp')}</button>`}</div></div>
+  ${mp ? '<div id="rh"></div>' : `<p>${t('sub')}</p><div class="row"><button id="rkb" class="rkb">${badge(rankOf(rk.rp),20)} ${t('ranked')} · ${esc(rankName(rankOf(rk.rp)))}</button></div>`}
+  <div class="chips">${MODES.map(m=>`<button data-m="${m}">${modeLabel(m)}</button>`).join('')}</div>
+  <div class="row"><button id="all">${t('all')}</button><button id="none">${t('none')}</button>
+  <label><input type="checkbox" id="oc"> ${t('oc')}</label><span id="cnt"></span></div>
+  <input id="q" type="search" placeholder="${t('ph')}" autocomplete="off" aria-label="${t('ph')}">
+  <div id="res" class="res" hidden></div>
+  <div id="picked" class="picked"></div>
+  <div class="row"><button class="go" id="go" style="flex:1">${t('start')}</button>${mp ? '' : `<button class="go bt" id="botb">⚔ ${t('botMode')}</button>`}</div>`;
+  const matches = () => {
+    const q = $('#q').value.trim().toLowerCase(); if (!q) return [];
+    const a = f => nm(f).toLowerCase(), e = f => f.properties.name.toLowerCase();
+    const hit = list.filter(f => a(f).includes(q) || e(f).includes(q));
+    return hit.sort((x,y) => (a(y).startsWith(q) || e(y).startsWith(q)) - (a(x).startsWith(q) || e(x).startsWith(q))).slice(0,40);
+  };
+  const results = () => {
+    const m = matches(), r = $('#res');
+    r.hidden = !$('#q').value.trim();
+    r.innerHTML = m.length ? m.map(f => `<button data-t="${f.i}" class="${sel.has(f.i)?'on':''}">${sel.has(f.i)?'✓ ':''}${nm(f)}</button>`).join('') : `<p>${t('nomatch')}</p>`;
+  };
+  const refresh = () => {
+    const chosen = list.filter(f => sel.has(f.i));
+    $('#picked').innerHTML = chosen.length ? chosen.map(f => `<button class="tag" data-rm="${f.i}" title="${t('rm')}">${nm(f)} ×</button>`).join('') : `<p>${t('empty')}</p>`;
+    $('#oc').checked = oceans;
+    $('#cnt').textContent = T[lang].cnt(sel.size, oceans) + (curMode && !mp ? ' · 🏆 ' + modeLabel(curMode) : '');
+    $('#go').disabled = !sel.size && !oceans; if ($('#botb')) $('#botb').disabled = $('#go').disabled;
+    results();
+    if (mp && mp.host) pushLobby();
+  };
+  p.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if (d.a) roomAction(d.a);
+    else if (b.id==='setb') openSettings();
+    else if (b.id==='lbb') openLB();
+    else if (b.id==='rkb') rankedScreen();
+    else if (b.id==='botb') openBotPick();
+    else if (b.id==='mpb') mpEntry();
+    else if (d.m){ sel = d.m==='Oceans only' ? new Set() : new Set(list.filter(f=>inMode(f,d.m)).map(f=>f.i)); oceans = d.m==='Oceans only'; curMode = d.m; refresh(); }
+    else if (d.t){ const i = +d.t; sel.has(i) ? sel.delete(i) : sel.add(i); curMode = null; refresh(); }
+    else if (d.rm){ sel.delete(+d.rm); curMode = null; refresh(); }
+    else if (b.id==='all'){ sel = new Set(list.map(f=>f.i)); curMode = oceans ? null : 'World'; refresh(); }
+    else if (b.id==='none'){ sel.clear(); oceans = false; curMode = null; $('#q').value = ''; refresh(); }
+    else if (b.id==='go') mp ? hostStart() : start();
+  };
+  p.oninput = e => { if (e.target.id==='q') results(); };
+  p.onkeydown = e => {
+    if (e.target.id==='q' && e.key==='Enter'){ const m = matches()[0]; if (m){ sel.add(m.i); curMode = null; e.target.value = ''; refresh(); } }
+  };
+  p.onchange = e => { if (e.target.id==='oc'){ oceans = e.target.checked; curMode = null; refresh(); } };
+  refresh();
+}
+
+function drawMap(playing){
+  const W = innerWidth, H = innerHeight, sw = playing ? sideW() : 0;
+  proj = d3.geoNaturalEarth1().fitExtent([[16,16],[W - sw - 16, H - 16]], {type:'Sphere'});
+  path = d3.geoPath(proj);
+  g = svg.append('g');
+  g.selectAll('path').data(feats).join('path').attr('class', f => 'c' + (playing && sel.has(f.i) ? '' : ' off'))
+    .classed('off', f => playing ? !sel.has(f.i) : false).attr('d', path).attr('data-i', f => f.i);
+  zoom = d3.zoom().scaleExtent([1,60]).on('zoom', e => {
+    g.attr('transform', e.transform); curK = e.transform.k;
+    g.selectAll('.oc').attr('font-size', 15/curK);
+    g.selectAll('.cs').attr('transform', `scale(${1/curK})`);
+  });
+  svg.call(zoom).on('dblclick.zoom', null);
+}
+
+// ================= game core =================
+function start(){
+  const keys = baseKeys();
+  runMeta = curMode ? {mode:curMode, nolist:SET.nolist, rand:SET.rand} : null; ranked = false;
+  begin(keys, SET.nolist);
+}
+
+function begin(keys, ll, botTier){
+  stopBot(); LL = !!ll && !mp;
+  $('#panel').hidden = true; $('#pm').hidden = true;
+  svg = d3.select('#map'); svg.selectAll('*').remove();
+  drawMap(true);
+  cur = {}; curK = 1; mpSnap = null; mpPlaced = new Set(); cl = mp ? g.append('g').attr('class','curs') : null;
+  const W = innerWidth, H = innerHeight, sw = sideW(), worldW = path.bounds({type:'Sphere'})[1][0] - path.bounds({type:'Sphere'})[0][0];
+  const chosen = feats.filter(f => sel.has(f.i)).map(f => ({f,b:path.bounds(f)})).filter(o => o.b[1][0]-o.b[0][0] < worldW*.4);
+  if (chosen.length && !oceans){
+    const x0 = d3.min(chosen,o=>o.b[0][0]), y0 = d3.min(chosen,o=>o.b[0][1]), x1 = d3.max(chosen,o=>o.b[1][0]), y1 = d3.max(chosen,o=>o.b[1][1]);
+    const aw = W - sw - 40, ah = H - 80, k = Math.max(1, Math.min(40, .92*Math.min(aw/(x1-x0), ah/(y1-y0))));
+    svg.call(zoom.transform, d3.zoomIdentity.translate(aw/2+20 - k*(x0+x1)/2, H/2 - k*(y0+y1)/2).scale(k));
+  }
+  const items = keys.map(k => ({k, name:itemName(k), ocean:k[0]==='o'}));
+  state = {total:items.length, left:items.length, miss:0, t0:Date.now()};
+  queue = LL ? keys.slice() : []; qi = 0;
+  applyDir();
+  const side = $('#side'); side.hidden = LL;
+  side.innerHTML = LL ? '' : items.map(it => `<div class="it" data-k="${it.k}" ${it.ocean?'style="font-style:italic"':''}>${esc(it.name)}</div>`).join('');
+  side.onpointerdown = onDown;
+  $('#hud').hidden = false;
+  $('#hud').onclick = e => { if (e.target.id==='quit') quitGame(); };
+  scr = 'game'; playing = true;
+  clearInterval(timer); timer = setInterval(hud, 500); hud();
+  showTip(); if (botTier != null) startBot(botTier, keys.length);
+}
+
+const myBoard = () => mp && mp.type === 'vs' ? mp.team : 0;
+function hud(){
+  if (!state) return;
+  const s = Math.floor((Date.now() - state.t0)/1000);
+  let a;
+  if (mp){
+    const my = myBoard(), l = mpSnap ? mpSnap.b.map(x => x.l) : [state.total, state.total];
+    const ms = mpSnap && mpSnap.s[mp.id] ? mpSnap.s[mp.id][1] : 0;
+    a = (mp.type==='vs' ? `<span class="tcol t${my}">${t('team')} ${my+1}</span>` : '') + `<b>${state.total - l[my]} / ${state.total}</b>` +
+      (mp.type==='vs' ? `<span>${t('opp')}: ${state.total - l[1-my]}</span>` : '') + `<span>${t('miss')}: ${ms}</span>`;
+  } else a = `<b>${state.total - state.left} / ${state.total}</b>` + (ranked ? `<span>${modeLabel(rankReg)}</span>` : '') + (LL && queue[qi] ? `<span class="want">🎯 ${esc(itemName(queue[qi]))}</span>` : '') + `<span>${t('miss')}: ${state.miss}</span>` + (bot ? `<span class="botp">${esc(botNameOf(bot.tier))}: ${bot.placed}/${bot.total}</span>` : '');
+  $('#hud').innerHTML = a + `<span dir="ltr">${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</span><button id="quit">${mp ? t('leave') : (ranked && bot ? t('forfeitB') : t('menu'))}</button>`;
+}
+
+function under(x,y){ const el = document.elementFromPoint(x,y); return el && el.classList && el.classList.contains('c') ? el : null; }
+let hotEl = null;
+function hot(x,y){ const el = under(x,y); if (el===hotEl) return; hotEl && hotEl.classList.remove('hot'); hotEl = el; el && !el.classList.contains('ok') && el.classList.add('hot'); }
+
+function onDown(e){
+  const it = e.target.closest('.it'); if (!it || it.classList.contains('taken')) return;
+  e.preventDefault(); it.setPointerCapture(e.pointerId);
+  const k = it.dataset.k;
+  const gh = it.cloneNode(true); gh.className = 'it ghost'; document.body.append(gh); it.classList.add('lift');
+  const abort = () => { it.onpointermove = it.onpointerup = it.onpointercancel = null; gh.remove(); it.classList.remove('lift'); hot(-1,-1); curDrag = null; };
+  const mv = ev => { gh.style.left = ev.clientX+'px'; gh.style.top = ev.clientY+'px'; hot(ev.clientX, ev.clientY); };
+  const end = (ev, cancel) => { abort(); if (cancel){ if (mp) act({t:'drop', k, cancel:1}); } else drop(it, ev.clientX, ev.clientY); };
+  curDrag = {abort};
+  if (mp) act({t:'grab', k});
+  mv(e);
+  it.onpointermove = mv; it.onpointerup = ev => end(ev,false); it.onpointercancel = ev => end(ev,true);
+}
+
+function markPlaced(k){
+  const i = +k.slice(1);
+  if (k[0]==='c') g.select(`path[data-i="${i}"]`).classed('ok', true);
+  else if (g.select(`text[data-o="${i}"]`).empty()){
+    const o = OCEANS[i], c = proj([o[1],o[2]]);
+    g.append('text').attr('class','oc').attr('data-o',i).attr('x',c[0]).attr('y',c[1]).attr('font-size',15/d3.zoomTransform(svg.node()).k).text(oname(i));
+    cl && cl.raise();
+  }
+}
+
+function drop(it, x, y){
+  const k = it.dataset.k;
+  if (x > innerWidth - sideW()){ if (mp) act({t:'drop', k, cancel:1}); return; } // dropped back on the list
+  const el = under(x,y); let ok = false;
+  if (k[0]==='c'){
+    ok = !!el && el.dataset.i === k.slice(1);
+  } else if (!el){
+    const o = OCEANS[+k.slice(1)], p = d3.zoomTransform(svg.node()).invert([x,y]), ll = proj.invert(p);
+    if (ll && isFinite(ll[0]) && d3.geoDistance(ll,[o[1],o[2]]) < o[3]) ok = true;
+  }
+  if (ok){
+    markPlaced(k); it.remove();
+    if (mp){ act({t:'drop', k, ok:true}); return; }
+    if (!--state.left) finish(); else hud();
+    return;
+  }
+  if (mp) act({t:'drop', k, ok:false}); else { state.miss++; hud(); }
+  it.classList.add('shake'); setTimeout(() => it.classList.remove('shake'), 300);
+  if (el && !el.classList.contains('ok')){ el.classList.add('bad'); setTimeout(() => el.classList.remove('bad'), 500); }
+}
+
+function finish(lost){
+  clearInterval(timer); playing = false; scr = 'results'; $('#tip').hidden = true;
+  const B = bot, wasRanked = ranked, placedN = state.total - state.left; stopBot();
+  const sec = Math.round((Date.now() - state.t0) / 100) / 10, tm = fmtT(sec), p = $('#panel');
+  $('#side').hidden = $('#hud').hidden = true;
+  p.hidden = false; p.className = 'box auto';
+  let title = t('done'), line = T[lang].res(state.total, tm, state.miss), extra = '';
+  if (B){
+    if (lost){ title = t('loseRace').replace('{b}', botNameOf(B.tier)); line = t('lostDesc').replace('{n}', placedN).replace('{m}', state.total); }
+    else { title = t('winRace'); }
+    if (wasRanked) extra = rankResultHTML(applyRanked(!!lost));
+  } else if (runMeta) extra = recordRun(sec);
+  p.innerHTML = `<h1>${title}</h1><p>${line}</p>${extra}
+  <div style="flex:1"></div>${wasRanked ? `<button class="go" id="again2">${t('playAgain')}</button>` : ''}<button class="go" id="again">${t('back')}</button>`;
+  p.onclick = e => { if (e.target.id === 'again') menu(); else if (e.target.id === 'again2') startRanked(); };
+  p.onchange = p.oninput = p.onkeydown = null;
+}
+
+// ================= multiplayer: shared UI =================
+const getP = id => mp ? (mp.host ? mp.P[id] : (mp.room && mp.room.players.find(q => q.id === id))) : null;
+function lobbyMsg(){
+  return {t:'lobby', code:mp.code, type:mp.type, phase:mp.phase, host:mp.hostId, n:sel.size + (oceans ? 7 : 0),
+    players:Object.values(mp.P).map(({id,name,pfp,team}) => ({id,name,pfp,team}))};
+}
+function roomHTML(r, host){
+  const me = r.players.find(q => q.id === mp.id), myT = me ? me.team : 0;
+  const pl = q => `<div class="pl">${av(q,26)}<span>${esc(q.name)}${q.id===mp.id ? ` (${t('you')})` : ''}${q.id===r.host ? ' 👑' : ''}</span></div>`;
+  let h = `<div class="rhead"><div><span class="muted">${t('room')}</span> <button class="code" data-a="copy" title="${t('copy')}">${esc(r.code)}</button></div><button data-a="leave">${t('leave')}</button></div>`;
+  h += host ? `<div class="chips"><button data-a="ty:casual" class="${r.type==='casual'?'on':''}">${t('casual')}</button><button data-a="ty:vs" class="${r.type==='vs'?'on':''}">${t('vs')}</button></div>` : `<b>${r.type==='vs' ? t('vs') : t('casual')}</b>`;
+  h += `<p class="muted">${r.type==='vs' ? t('vsD') : t('casD')}</p>`;
+  if (r.type === 'vs'){
+    h += '<div class="teams">' + [0,1].map(tm => `<div class="tm t${tm}"><div class="th"><span>${t('team')} ${tm+1}</span>${myT!==tm ? `<button data-a="team:${tm}">${t('joinTeam')}</button>` : ''}</div>${r.players.filter(q => q.team===tm).map(pl).join('') || '<p class="muted">—</p>'}</div>`).join('') + '</div>';
+    if (host) h += `<div><button data-a="shuf">🔀 ${t('shuffle')}</button></div>`;
+  } else h += `<div class="plist">${r.players.map(pl).join('')}</div>`;
+  return h + '<p class="err" id="rmsg"></p>';
+}
+function renderRoomHead(){ const el = $('#rh'); if (!el || scr !== 'menu' || !mp || !mp.host) return; el.innerHTML = roomHTML(lobbyMsg(), true); }
+function lobbyClient(){
+  scr = 'lobby'; const p = $('#panel'); p.hidden = false; p.className = 'box auto'; applyDir();
+  p.onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.a) roomAction(b.dataset.a); };
+  p.oninput = p.onchange = p.onkeydown = null;
+  const r = mp.room;
+  p.innerHTML = `<h1>${t('title')}</h1>` + (r ? roomHTML(r, false) + `<p>${r.n} ${t('items')}</p><p class="muted">${t('waitHost')}</p>` : `<p>${t('connecting')}</p>`);
+}
+function mpEntry(){
+  scr = 'entry'; const p = $('#panel'); p.hidden = false; p.className = 'box auto'; applyDir();
+  p.innerHTML = `<div class="top"><h1>${t('mp')}</h1><button id="b2">${t('menu')}</button></div><p>${t('mpsub')}</p>
+  <button class="go" id="create">${t('create')}</button>
+  <p style="text-align:center" class="muted">${t('or')}</p>
+  <div class="row"><input id="jc" maxlength="8" placeholder="${t('codeph')}" autocomplete="off"><button class="go" id="jn" style="padding:9px 18px">${t('join')}</button></div>
+  <p class="muted">${t('nettip')}</p>`;
+  p.oninput = p.onchange = null;
+  p.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id==='b2') menu(); else if (b.id==='create') createRoom(); else if (b.id==='jn') joinRoom($('#jc').value);
+  };
+  p.onkeydown = e => { if (e.target.id==='jc' && e.key==='Enter') joinRoom(e.target.value); };
+  $('#jc').focus();
+}
+function roomAction(a){
+  if (!mp) return;
+  if (a === 'leave') leaveRoom();
+  else if (a === 'copy'){ try { navigator.clipboard.writeText(mp.code); toast(t('copied')); } catch(e){} }
+  else if (a === 'lobby'){ if (mp.host) pushLobby(); menu(); }
+  else if (a.startsWith('ty:') && mp.host){ mp.type = a.slice(3); pushLobby(); }
+  else if (a.startsWith('team:')){
+    const tm = +a.slice(5);
+    if (mp.host){ mp.P[mp.id].team = tm; pushLobby(); } else if (mp.conn.open) mp.conn.send({t:'team', team:tm});
+  }
+  else if (a === 'shuf' && mp.host){ shuffle(Object.keys(mp.P)).forEach((id,i) => mp.P[id].team = i % 2); pushLobby(); }
+}
+function leaveRoom(msgKey){
+  try { mp && mp.peer.destroy(); } catch(e){}
+  mp = null; G = null; playing = false; cl = null; cur = {}; mpSnap = null;
+  menu(); if (msgKey) toast(t(msgKey));
+}
+
+// ================= multiplayer: networking (PeerJS / WebRTC) =================
+const genCode = () => { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 5; i++) s += c[Math.floor(Math.random() * c.length)]; return s; };
+const bc = (msg, f) => { if (!mp || !mp.conns) return; for (const id in mp.conns){ const c = mp.conns[id]; if (c.open && (!f || f(id))) c.send(msg); } };
+const sendTo = (id, msg) => { if (id === mp.id) clientMsg(msg); else { const c = mp.conns[id]; c && c.open && c.send(msg); } };
+const act = msg => { if (!mp) return; if (mp.host) hostApply(mp.id, msg); else if (mp.conn.open) mp.conn.send(msg); };
+
+function createRoom(){
+  if (typeof Peer === 'undefined') return toast(t('neterr'));
+  toast(t('connecting'));
+  const make = n => {
+    const code = genCode(), peer = new Peer('blindmap-' + code);
+    peer.on('open', id => {
+      mp = {host:true, peer, id, hostId:id, code, type:'casual', phase:'lobby', P:{}, conns:{}};
+      mp.P[id] = {id, name:prof.name, pfp:prof.pfp, team:0};
+      peer.on('connection', hostConn);
+      $('#toast').hidden = true; menu();
+    });
+    peer.on('error', e => {
+      if (mp) return;
+      try { peer.destroy(); } catch(x){}
+      if (e.type === 'unavailable-id' && n < 5) make(n + 1); else toast(t('neterr'));
+    });
+  };
+  make(0);
+}
+function hostConn(conn){
+  conn.on('data', m => {
+    if (!m || typeof m !== 'object' || !mp) return;
+    if (m.t === 'hello'){
+      if (mp.conns[conn.peer]) return;
+      if (mp.phase !== 'lobby'){ conn.send({t:'rej', why:'started'}); return; }
+      const ps = Object.values(mp.P);
+      if (ps.length >= 8){ conn.send({t:'rej', why:'full'}); return; }
+      const t0 = ps.filter(q => q.team === 0).length, t1 = ps.length - t0;
+      mp.conns[conn.peer] = conn;
+      mp.P[conn.peer] = {id:conn.peer, name:cleanName(m.name), pfp:cleanPfp(m.pfp), team:t0 <= t1 ? 0 : 1};
+      pushLobby(); return;
+    }
+    if (mp.P[conn.peer]) hostApply(conn.peer, m);
+  });
+  conn.on('close', () => dropPlayer(conn.peer));
+  conn.on('error', () => dropPlayer(conn.peer));
+}
+function dropPlayer(id){
+  if (!mp || !mp.P[id]) return;
+  delete mp.conns[id]; delete mp.P[id];
+  if (G){
+    G.boards.forEach(b => { for (const k in b.carry) if (b.carry[k] === id) delete b.carry[k]; });
+    bc({t:'cur', id, p:null}); showCursor(id, null); pushSnap();
+  }
+  pushLobby();
+}
+function pushLobby(){ if (!mp || !mp.host) return; bc(lobbyMsg()); renderRoomHead(); }
+
+function joinRoom(code){
+  code = String(code || '').trim().toUpperCase(); if (!code) return;
+  if (typeof Peer === 'undefined') return toast(t('neterr'));
+  toast(t('connecting'));
+  const peer = new Peer(); let ok = false, to;
+  const fail = k => { if (ok) return; clearTimeout(to); try { peer.destroy(); } catch(e){} toast(t(k)); };
+  to = setTimeout(() => fail('notfound'), 12000);
+  peer.on('error', e => { if (!ok) fail(e.type === 'peer-unavailable' ? 'notfound' : 'neterr'); });
+  peer.on('open', id => {
+    const conn = peer.connect('blindmap-' + code, {reliable:true});
+    conn.on('open', () => {
+      clearTimeout(to); ok = true; $('#toast').hidden = true;
+      mp = {host:false, peer, id, conn, code, room:null, type:'casual', team:0};
+      conn.send({t:'hello', name:prof.name, pfp:prof.pfp});
+      scr = 'lobby'; lobbyClient();
+    });
+    conn.on('data', m => { if (mp && mp.conn === conn && m && typeof m === 'object') clientMsg(m); });
+    conn.on('close', () => { if (mp && mp.conn === conn) leaveRoom('hostleft'); });
+  });
+}
+
+function clientMsg(m){
+  switch (m.t){
+    case 'lobby':
+      mp.room = m; mp.type = m.type;
+      if (scr === 'lobby') lobbyClient();
+      break;
+    case 'start':
+      sel = new Set(m.sel); oceans = !!m.oceans; mp.type = m.type; mp.team = m.teams[mp.id] || 0;
+      begin(m.keys); break;
+    case 'snap': applySnap(m); break;
+    case 'cur': showCursor(m.id, m.p); break;
+    case 'deny': curDrag && curDrag.abort(); break;
+    case 'end': showResults(m); break;
+    case 'rej': leaveRoom(m.why); break;
+  }
+}
+
+// ---- host authority ----
+function hostStart(){
+  if (!mp || !mp.host || (!sel.size && !oceans)) return;
+  const ps = Object.values(mp.P);
+  if (mp.type === 'vs' && (!ps.some(q => q.team === 0) || !ps.some(q => q.team === 1))){ const e = $('#rmsg'); if (e) e.textContent = t('need2'); return; }
+  const keys = [...sel].map(i => 'c' + i); if (oceans) OCEANS.forEach((_,i) => keys.push('o' + i));
+  shuffle(keys); // random order in multiplayer
+  const vs = mp.type === 'vs', teams = {};
+  ps.forEach(q => teams[q.id] = vs ? q.team : 0);
+  G = {boards:(vs ? [0,1] : [0]).map(() => ({left:new Set(keys), placed:{}, carry:{}})), team:teams, stats:{}, info:{}, grab:{}, t0:Date.now(), total:keys.length};
+  ps.forEach(q => { G.stats[q.id] = {placed:0, miss:0, holdMs:0, holdN:0}; G.info[q.id] = {name:q.name, pfp:q.pfp, team:teams[q.id]}; });
+  mp.phase = 'play'; mp.team = teams[mp.id];
+  bc({t:'start', type:mp.type, keys, teams, sel:[...sel], oceans});
+  begin(keys);
+}
+function relayCur(from, p){
+  if (!G) return;
+  const tm = G.team[from];
+  bc({t:'cur', id:from, p}, id => id !== from && G.team[id] === tm);
+  if (from !== mp.id && G.team[mp.id] === tm) showCursor(from, p);
+}
+function pushSnap(){
+  if (!G) return;
+  const m = {t:'snap', b:G.boards.map(b => ({l:b.left.size, p:Object.entries(b.placed), c:b.carry})),
+    s:Object.fromEntries(Object.entries(G.stats).map(([i,s]) => [i, [s.placed, s.miss]]))};
+  bc(m); applySnap(m);
+}
+function hostApply(id, m){
+  const p = mp.P[id]; if (!p) return;
+  switch (m.t){
+    case 'prof':
+      p.name = cleanName(m.name); p.pfp = cleanPfp(m.pfp);
+      if (G && G.info[id]){ G.info[id].name = p.name; G.info[id].pfp = p.pfp; }
+      pushLobby(); break;
+    case 'team':
+      if (mp.phase === 'lobby' && (m.team === 0 || m.team === 1)){ p.team = m.team; pushLobby(); } break;
+    case 'cur':
+      if (m.p === null || (Array.isArray(m.p) && isFinite(m.p[0]) && isFinite(m.p[1]))) relayCur(id, m.p); break;
+    case 'grab': {
+      if (!G) return;
+      const b = G.boards[G.team[id]]; if (!b) return; const k = m.k;
+      if (typeof k !== 'string' || !b.left.has(k) || b.carry[k]){ sendTo(id, {t:'deny', k}); return; }
+      for (const kk in b.carry) if (b.carry[kk] === id) delete b.carry[kk];
+      b.carry[k] = id; G.grab[id] = Date.now(); pushSnap(); break;
+    }
+    case 'drop': {
+      if (!G) return;
+      const tm = G.team[id], b = G.boards[tm], k = m.k;
+      if (!b || b.carry[k] !== id) return;
+      delete b.carry[k]; const s = G.stats[id];
+      if (m.cancel){}
+      else if (m.ok){ b.left.delete(k); b.placed[k] = id; s.placed++; s.holdMs += Date.now() - (G.grab[id] || Date.now()); s.holdN++; }
+      else s.miss++;
+      pushSnap();
+      if (b.left.size === 0) finishGame(tm);
+      break;
+    }
+  }
+}
+function finishGame(win){
+  const players = Object.keys(G.info).map(id => ({...G.info[id], ...G.stats[id], id}));
+  const m = {t:'end', win, type:mp.type, ms:Date.now() - G.t0, total:G.total, players};
+  mp.phase = 'lobby'; G = null; bc(m); showResults(m);
+}
+
+// ---- cursors & snapshot rendering (all players) ----
+function sendCur(x,y){
+  let p = null;
+  if (x < innerWidth - sideW() && y >= 0 && x >= 0){
+    const q = d3.zoomTransform(svg.node()).invert([x,y]), ll = proj.invert(q);
+    if (ll && isFinite(ll[0]) && isFinite(ll[1])) p = [+ll[0].toFixed(3), +ll[1].toFixed(3)];
+  }
+  if (!p && lastNull) return; lastNull = !p;
+  if (mp.host) relayCur(mp.id, p); else if (mp.conn.open) mp.conn.send({t:'cur', p});
+}
+addEventListener('pointermove', e => {
+  if (!mp || !playing || !svg) return;
+  const n = performance.now(); if (n - lastSend < 45) return; lastSend = n;
+  sendCur(e.clientX, e.clientY);
+});
+function showCursor(id, p){
+  if (!cl || !playing) return;
+  let c = cur[id];
+  if (!p){ if (c){ c.remove(); delete cur[id]; } return; }
+  const xy = proj(p); if (!xy) return;
+  if (!c){
+    c = cur[id] = cl.append('g').attr('class','rc');
+    const s = c.append('g').attr('class','cs').attr('transform', `scale(${1/curK})`);
+    s.append('path').attr('class','cp').attr('d','M0,0 L0,17 L4.5,13 L8,20 L10.5,19 L7,12 L13,12 Z');
+    const q = getP(id); s.append('text').attr('class','cn').attr('x',14).attr('y',26).text(q ? q.name : '');
+    const ci = s.append('g').attr('class','ci').attr('transform','translate(14,46)').attr('display','none');
+    ci.append('rect'); ci.append('text');
+    if (mpSnap){ const b = mpSnap.b[myBoard()]; setCarry(id, Object.keys(b.c).find(k => b.c[k] === id)); }
+  }
+  c.style('transform', `translate(${xy[0]}px,${xy[1]}px)`);
+}
+function setCarry(id, k){
+  const c = cur[id]; if (!c) return; const ci = c.select('.ci');
+  if (!k){ ci.attr('display','none'); return; }
+  const tx = ci.select('text').text(itemName(k)); ci.attr('display', null);
+  const bb = tx.node().getBBox();
+  ci.select('rect').attr('x', bb.x - 5).attr('y', bb.y - 2).attr('width', bb.width + 10).attr('height', bb.height + 4).attr('rx', 3);
+}
+function applySnap(m){
+  mpSnap = m; if (!playing || !state || !mp) return;
+  const b = m.b[myBoard()], side = $('#side');
+  for (const [k] of b.p){
+    if (!mpPlaced.has(k)){ mpPlaced.add(k); markPlaced(k); }
+    const el = side.querySelector(`[data-k="${k}"]`); if (el) el.remove();
+  }
+  side.querySelectorAll('.it').forEach(el => {
+    const by = b.c[el.dataset.k], taken = by && by !== mp.id;
+    el.classList.toggle('taken', !!taken);
+    if (taken){ const q = getP(by); el.dataset.by = q ? q.name : ''; } else delete el.dataset.by;
+  });
+  for (const id in cur) setCarry(id, Object.keys(b.c).find(k => b.c[k] === id));
+  hud();
+}
+
+// ================= results / MVP =================
+function showResults(m){
+  clearInterval(timer); playing = false; scr = 'results'; cl = null; cur = {};
+  $('#side').hidden = $('#hud').hidden = true;
+  const p = $('#panel'); p.hidden = false; p.className = 'box auto'; applyDir();
+  const P = m.players, s = Math.floor(m.ms / 1000), tm = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+  const misses = P.reduce((a,q) => a + q.miss, 0);
+  const head = m.type === 'vs' ? (m.win === mp.team ? t('won') : t('lost')) : t('done');
+  const sub = m.type === 'vs' ? `<span class="tcol t${m.win}">${t('vsWin').replace('{n}', m.win + 1)}</span> · ${tm}` : `${m.total} ✓ · ${tm} · ${misses} ${t('miss').toLowerCase()}`;
+  const att = q => q.placed + q.miss, avg = q => q.holdN ? q.holdMs / q.holdN : null;
+  const W = (q, f, best) => P.filter(x => f(x) === best);
+  const pick = (f, dir) => { let best = null; for (const q of P){ const v = f(q); if (v === null) continue; if (best === null || (dir > 0 ? v > best : v < best)) best = v; } return best; };
+  const cats = [
+    ['🎯', t('c_guess'), q => q.placed, 1, v => v],
+    ['💥', t('c_miss'), q => q.miss, 1, v => v],
+    ['🏹', t('c_acc'), q => att(q) ? q.placed / att(q) : null, 1, v => Math.round(v * 100) + '%'],
+    ['⚡', t('c_fast'), avg, -1, v => (v/1000).toFixed(1) + 's · ' + t('avg')],
+    ['🐢', t('c_slow'), avg, 1, v => (v/1000).toFixed(1) + 's · ' + t('avg')]
+  ];
+  const who = ws => ws.map(q => `<span class="w">${av(q,30)}<b>${esc(q.name)}</b></span>`).join('');
+  const cards = cats.map(([ic, ti, f, dir, fmt]) => {
+    const best = pick(f, dir); if (best === null) return '';
+    if (ti === t('c_miss') && best === 0) return `<div class="cat"><div class="ct">${ic} ${ti}</div><div class="cw">🎉 ${t('nomiss')}</div></div>`;
+    if (ti === t('c_guess') && best === 0) return '';
+    return `<div class="cat"><div class="ct">${ic} ${ti}</div><div class="cw">${who(W(null, f, best))}</div><div class="cv">${fmt(best)}</div></div>`;
+  }).join('');
+  const score = q => q.placed - q.miss * .5, top = Math.max(...P.map(score));
+  const mvp = P.filter(q => score(q) === top);
+  p.innerHTML = `<h1>${head}</h1><p>${sub}</p>
+  <div class="mvp"><div class="ct">👑 ${t('mvp')}</div><div class="cw">${who(mvp)}</div><div class="cv">${mvp.map(q => q.placed + ' ✓ / ' + q.miss + ' ✗').join(' · ')}</div></div>
+  <div class="cats">${cards}</div>
+  <button class="go" data-a="lobby">${t('tolobby')}</button>`;
+  p.onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.a) roomAction(b.dataset.a); };
+  p.onchange = p.oninput = p.onkeydown = null;
+}
+
+// ================= init =================
+renderMe(); $('#me').onclick = openProf; document.getElementById('map').addEventListener('click', onPick);
+</script>
+</body>
+</html>
